@@ -63,17 +63,21 @@ function network_grammar(
 
     required = problem.required_molecules
     required_rules = Vector{Tuple{Int, ReactionPosition}}()
+    req_molecules = Vector{Tuple{Molecule, ReactionPosition}}()
     for (i, required_molecule) in enumerate(required)
         molecule = required_molecule.molecule
         add_rule!(grammar, :(required_molecule = $molecule))
         rule = findfirst(==(:($molecule)), grammar.rules)
         push!(required_rules, (rule, required_molecule.position))
+        push!(req_molecules, (required_molecule.molecule, required_molecule.position))
     end
+
 
     for molecule in required_molecules
         add_rule!(grammar, :(required_molecule = $molecule))
         rule = findfirst(==(:($molecule)), grammar.rules)
         push!(required_rules, (rule, UNKNOWN))
+        push!(req_molecules, (molecule, UNKNOWN))
     end
 
     if length(required) == 0 && length(required_molecules) == 0 && check_required
@@ -82,7 +86,7 @@ function network_grammar(
         haskey(settings.options, :disable_contains_molecules) &&
         settings.options[:disable_contains_molecules]
     )
-        addconstraint!(grammar, ContainsMolecules(required_rules))
+        addconstraint!(grammar, ContainsMolecules(req_molecules, required_rules))
     end
 
     return grammar
