@@ -9,9 +9,8 @@ function ==(a::LocalUniformBalancedReaction, b::LocalUniformBalancedReaction)
     return a.path == b.path && a.atom_paths == b.atom_paths
 end
 
-import Base.hash
-function hash(a::LocalUniformBalancedReaction, h::UInt)
-    return hash(a.path, h) + hash(a.input_atom_paths, h) + hash(a.output_atom_paths, h)
+function Base.hash(a::LocalUniformBalancedReaction, h::UInt)
+    return hash(a.output_atom_paths, hash(a.input_atom_paths, hash(a.path, h)))
 end
 
 function HerbConstraints.shouldschedule(

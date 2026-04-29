@@ -102,6 +102,7 @@ for (name, problem, num_molecules, num_reactions, num_networks, network_goal) in
         max_time = max_time, max_programs = num_networks, max_depth = 10
     )
 
+    #= DNF for every problem =#
     # Pipeline: Problem -> Networks
     elapsed_time = @elapsed networks = synthesize_networks(problem, network_settings)
     println(
@@ -127,6 +128,7 @@ for (name, problem, num_molecules, num_reactions, num_networks, network_goal) in
     )
     rank_networks(pbar, networks, problem, network_goal)
 
+    #= DNF for every problem =#
     # Pipeline: Problem -> Reactions -> Networks
     elapsed_time = @elapsed (networks,
         reactions) = synthesize_networks_2(

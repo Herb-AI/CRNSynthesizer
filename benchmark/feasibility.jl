@@ -134,6 +134,7 @@ for (name, problem, molecules_goal, reactions_goal, network_goal) in PROBLEMS
     # ----------------- Until Network Found -----------------
     # -------------------------------------------------------
 
+    #= DNF for every problem =#
     # Pipeline: Problem -> Networks
     settings = SynthesizerSettings(;
         max_time = max_time, max_depth = 10, goal = [network_goal], benchmark_type = UntilFound
@@ -179,6 +180,7 @@ for (name, problem, molecules_goal, reactions_goal, network_goal) in PROBLEMS
         )
     end
 
+    #= DNF for every problem except water (still takes 500 seconds for water) =#
     # Pipeline: Problem -> Reactions -> Networks
     reaction_settings = SynthesizerSettings(;
         max_time = max_time, max_depth = 10, goal = reactions_goal, benchmark_type = UntilFound
