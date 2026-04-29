@@ -1,8 +1,8 @@
 function synthesize_molecules(
-        atoms::Vector{Atom}, settings::SynthesizerSettings
+        atoms::Vector{Atom}, settings::SynthesizerSettings, starting_element::Union{Symbol, AbstractRuleNode} = :molecule
 )::Vector{Molecule}
     grammar = SMILES_grammar(atoms; settings = settings)
-    iterator = get_iterator(settings, grammar, :molecule)
+    iterator = get_iterator(settings, grammar, starting_element)
 
     candidates = Vector{Molecule}()
     start_time = time()

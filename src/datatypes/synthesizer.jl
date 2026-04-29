@@ -45,16 +45,17 @@ function SynthesizerSettings(;
 end
 
 function get_iterator(
-        settings::SynthesizerSettings, grammar::ContextSensitiveGrammar, starting_symbol::Symbol
+        settings::SynthesizerSettings, grammar::ContextSensitiveGrammar, starting_element::Union{
+            Symbol, AbstractRuleNode}
 )
     @match settings.iterator begin
         # BreadthFirst => return BFSIterator(grammar, starting_symbol, max_depth=settings.max_depth)
         BreadthFirst => return MyBFSIterator(
-            grammar, starting_symbol, max_depth = settings.max_depth)
+            grammar, starting_element, max_depth = settings.max_depth)
         DepthFirst => return DFSIterator(
-            grammar, starting_symbol, max_depth = settings.max_depth)
+            grammar, starting_element, max_depth = settings.max_depth)
         BottomUp => return BUIterator(
-            grammar, starting_symbol, max_depth = settings.max_depth)
+            grammar, starting_element, max_depth = settings.max_depth)
     end
 end
 
