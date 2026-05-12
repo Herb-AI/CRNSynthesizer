@@ -19,8 +19,8 @@ function interpret_chain(program::AbstractRuleNode, grammar::AbstractGrammar)::S
 
     @match rule begin
         :(SMILES_combine_chain(bond,
-            structure,
-            chain)) => begin
+        structure,
+        chain)) => begin
             bond_str = interpret_bond(program.children[1], grammar)
             structure_str = interpret_structure(program.children[2], grammar)
             chain_str = interpret_chain(program.children[3], grammar)
@@ -28,7 +28,7 @@ function interpret_chain(program::AbstractRuleNode, grammar::AbstractGrammar)::S
         end
 
         :(structure * bond *
-          chain) => begin
+        chain) => begin
             structure_str = interpret_structure(program.children[1], grammar)
             bond_str = interpret_bond(program.children[2], grammar)
             chain_str = interpret_chain(program.children[3], grammar)
@@ -36,13 +36,63 @@ function interpret_chain(program::AbstractRuleNode, grammar::AbstractGrammar)::S
         end
 
         :(atom *
-          ringbonds) => begin
+        ringbonds) => begin
             atom_str = interpret_atom(program.children[1], grammar)
             ringbonds_str = interpret_ringbonds(program.children[2], grammar)
             return atom_str * ringbonds_str
         end
 
+        :(structure * "-" * fragment_X_entry) => begin
+            structure_str = interpret_structure(program.children[1], grammar)
+            fragment_X_entry_str = interpret_fragment_X_entry(program.children[2], grammar)
+            return structure_str * "-" * fragment_X_entry_str
+        end
+
         _ => throw(ArgumentError("Unknown rule: $rule"))
+    end
+end
+
+function interpret_fragment_X_entry(
+        program::AbstractRuleNode, grammar::AbstractGrammar)::String
+    rule = grammar.rules[get_rule(program)]
+    if rule isa String
+        return rule
+    end
+
+    result = ""
+    child_count = 0
+    for arg in rule.args[2:end]
+        if arg isa String
+            result *= arg
+        else
+            @match arg begin
+                :fragment_X_exit => begin
+                    child_count += 1
+                    result *= interpret_fragment_X_exit(
+                        program.children[child_count], grammar)
+                end
+                _ => throw(ArgumentError("Unknown fragment exit rule: $arg"))
+            end
+        end
+    end
+    return result
+end
+
+function interpret_fragment_X_exit(
+        program::AbstractRuleNode, grammar::AbstractGrammar)::String
+    rule = grammar.rules[get_rule(program)]
+
+    @match rule begin
+        :("(-" * chain * ")") => begin
+            return "(-" * interpret_chain(program.children[1], grammar) * ")"
+        end
+        :("-" * digit) => begin
+            return "-" * interpret_digit(program.children[1], grammar)
+        end
+        :("(-" * fragment_X_entry * ")") => begin
+            return "(-" * interpret_fragment_X_entry(program.children[1], grammar) * ")"
+        end
+        _ => throw(ArgumentError("Unknown fragment exit rule: $rule"))
     end
 end
 
@@ -55,7 +105,7 @@ function interpret_structure(program::AbstractRuleNode, grammar::AbstractGrammar
 
     @match rule begin
         :(atom * ringbonds *
-          branches) => begin
+        branches) => begin
             atom_str = interpret_atom(program.children[1], grammar)
             ringbonds_str = interpret_ringbonds(program.children[2], grammar)
             branches_str = interpret_branches(program.children[3], grammar)
@@ -75,7 +125,7 @@ function interpret_ringbonds(program::AbstractRuleNode, grammar::AbstractGrammar
 
     @match rule begin
         :(ringbond *
-          ringbonds) => begin
+        ringbonds) => begin
             ringbond_str = interpret_ringbond(program.children[1], grammar)
             ringbonds_str = interpret_ringbonds(program.children[2], grammar)
             return ringbond_str * ringbonds_str
@@ -112,7 +162,7 @@ function interpret_branches(program::AbstractRuleNode, grammar::AbstractGrammar)
 
     @match rule begin
         :(branch *
-          branches) => begin
+        branches) => begin
             branch_str = interpret_branch(program.children[1], grammar)
             branches_str = interpret_branches(program.children[2], grammar)
             return branch_str * branches_str
@@ -131,7 +181,7 @@ function interpret_branch(program::AbstractRuleNode, grammar::AbstractGrammar)::
 
     @match rule begin
         :("(" * bond * chain *
-          ")") => begin
+        ")") => begin
             bond_str = interpret_bond(program.children[1], grammar)
             chain_str = interpret_chain(program.children[2], grammar)
             return "(" * bond_str * chain_str * ")"

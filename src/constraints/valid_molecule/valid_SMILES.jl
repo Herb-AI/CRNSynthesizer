@@ -12,8 +12,8 @@ end
 
 function ValidSMILES(grammar::ContextSensitiveGrammar)
     atom_dict, bond_dict = generate_atom_bond_dicts(grammar)
-    digit_to_grammar = generate_digit_to_grammar(grammar)
-    grammar_data = GrammarData(atom_dict, bond_dict, digit_to_grammar)
+    digit_to_grammar, bond_to_grammar = generate_digit_bond_to_grammar(grammar)
+    grammar_data = GrammarData(atom_dict, bond_dict, digit_to_grammar, bond_to_grammar)
     return ValidSMILES(grammar_data)
 end
 

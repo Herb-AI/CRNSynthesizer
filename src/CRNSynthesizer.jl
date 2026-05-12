@@ -3,6 +3,7 @@ module CRNSynthesizer
 using HerbGrammar, HerbSpecification, HerbSearch, HerbInterpret, HerbConstraints, HerbCore
 using MLStyle
 using Catalyst, DiffEqParamEstim, Optimization, OptimizationNLopt, OrdinaryDiffEq
+import RDKitMinimalLib, MoleculeFlow
 using Term.Progress
 using Term: with, update!
 
@@ -40,6 +41,7 @@ include("iterators/top_down.jl")
 include("synthesizers/molecule_synthesizer.jl")
 include("synthesizers/reaction_synthesizer.jl")
 include("synthesizers/network_synthesizer.jl")
+include("synthesizers/fragment_composer.jl")
 
 for n in names(@__MODULE__; all = true)
     if Base.isidentifier(n) && n ∉ (Symbol(@__MODULE__), :eval, :include)

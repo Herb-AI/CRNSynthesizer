@@ -3,6 +3,7 @@ mutable struct GrammarData
     grammar_to_available_atom_connections::Dict{Int, Int}
     grammar_to_bond_connections::Dict{Int, Int}
     ringbond_digit_to_grammar::Dict{Int, Int}
+    bond_to_grammar::Dict{String, Int}
 end
 
 function update_grammar_data!(
@@ -37,18 +38,24 @@ function digit_to_grammar(grammar_data::GrammarData, digit::Int)::Int
     return grammar_data.ringbond_digit_to_grammar[digit]
 end
 
+function bond_to_grammar(grammar_data::GrammarData, bond::String)::Int
+    @assert haskey(grammar_data.bond_to_grammar, bond) "key $bond not found in bond_to_grammar $(grammar_data.bond_to_grammar)"
+    return grammar_data.bond_to_grammar[bond]
+end
+
 function grammar_to_atom_connections(grammar_data::GrammarData, rule::Int)::Int
     @assert haskey(grammar_data.grammar_to_available_atom_connections, rule) "key $rule not found in grammar_to_available_atom_connections $(grammar_data.grammar_to_available_atom_connections)"
     return grammar_data.grammar_to_available_atom_connections[rule]
 end
 
 function grammar_to_bond_connections(grammar_data::GrammarData, rule::Int)::Int
-    @assert haskey(grammar_data.grammar_to_bond_connections, rule)
+    @assert haskey(grammar_data.grammar_to_bond_connections, rule) "key $rule not found in grammar_to_bond_connections $(grammar_data.grammar_to_bond_connections)"
     return grammar_data.grammar_to_bond_connections[rule]
 end
 
-function generate_digit_to_grammar(grammar)
+function generate_digit_bond_to_grammar(grammar)
     digit_dict = Dict{Int, Int}()
+    bond_dict = Dict{String, Int}()
 
     # Process the grammar rules
     for (i, rule) in enumerate(grammar.rules)
@@ -59,10 +66,17 @@ function generate_digit_to_grammar(grammar)
                     break
                 end
             end
+        elseif grammar.types[i] == :bond
+            for (bond, _) in bond_orders
+                if rule == bond
+                    bond_dict[bond] = i
+                    break
+                end
+            end
         end
     end
 
-    return digit_dict
+    return digit_dict, bond_dict
 end
 
 function generate_atom_bond_dicts(grammar)
@@ -90,6 +104,8 @@ function generate_atom_bond_dicts(grammar)
                     break
                 end
             end
+        elseif grammar.types[i] == :fragment_X_exit || grammar.types[i] == :fragment_X_entry
+            bond_dict[i] = 1
         end
     end
 

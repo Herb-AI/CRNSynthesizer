@@ -1,10 +1,8 @@
-using MoleculeFlow
-
-function is_bond(character::Char)
+function is_bond(character::Char)::Bool
     character == '-' || character == '=' || character == '≡'
 end
 
-function make_fragment_custom_explicit(frag_smile::String; min_digit::Int = 1)
+function make_fragment_custom_explicit(frag_smile::String, min_digit::Int)::Expr
     frag_smile = replace(
         frag_smile, '#' => '≡', r"\d+" => d -> string(parse(Int, d) + min_digit - 1))
 
@@ -54,23 +52,31 @@ function make_fragment_custom_explicit(frag_smile::String; min_digit::Int = 1)
         end
     end
 
-    result_smile
+    result_smile = replace(result_smile, r"^\[\d+\*\][-=≡]?" => "")
+    result_smile = replace(
+        result_smile, r"\([-=≡]?\[\d+\*\]\)" => "\" * fragment_X_exit * \"")
+    result_smile = replace(result_smile, r"[-=≡]?\[\d+\*\]" => "\" * fragment_X_exit * \"")
+
+    rule_str = "fragment_X_entry = \"" * result_smile * "\""
+    rule_str = replace(rule_str, " * \"\"" => "")
+    Meta.parse(rule_str)
 end
 
-function make_fragment_rdkit_explicit(frag_smiles::String)
-    mol_to_smiles(add_hs(mol_from_smiles(frag_smiles));
+function make_fragment_rdkit_explicit(frag_smiles::String)::String
+    MoleculeFlow.mol_to_smiles(
+        MoleculeFlow.add_hs(MoleculeFlow.mol_from_smiles(frag_smiles));
         kekule_smiles = true, all_bonds_explicit = true)
 end
 
-function has_connection_points(frag_smiles::String)
+function has_connection_points(frag_smiles::String)::Bool
     '*' in frag_smiles
 end
 
-function parse_molecule_to_fragment_rules(mol_smiles::String)
-    brics_smiles = brics_decompose(mol_from_smiles(mol_smiles))
+function parse_molecule_to_fragment_rules(
+        mol_smiles::String; min_digit::Int = 1)::Vector{Expr}
+    brics_smiles = MoleculeFlow.brics_decompose(
+        MoleculeFlow.mol_from_smiles(mol_smiles); min_fragment_size = 2)
     filter!(has_connection_points, brics_smiles)
-    map!(make_fragment_custom_explicit ∘ make_fragment_rdkit_explicit, brics_smiles)
-    println(brics_smiles)
+    map!(make_fragment_rdkit_explicit, brics_smiles)
+    return map(x -> make_fragment_custom_explicit(x, min_digit), brics_smiles)
 end
-
-# parse_molecule_to_fragment_rules("C=CC(=O)N1CCC[C@H](C1)N2C3=NC=NC(=C3C(=N2)C4=CC=C(C=C4)OC5=CC=CC=C5)N")

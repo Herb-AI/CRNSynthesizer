@@ -179,6 +179,14 @@ function post_atom_constraints!(
                     grammar_data,
                     relevant_bonds = [bond_path]
                 )
+            elseif rule == :(structure * "-" * fragment_X_entry)
+                bond_path = push!(copy(path), 2)
+                bonds = [relevant_bonds..., bond_path]
+
+                post_atom_constraints!(
+                    solver, push!(copy(path), 1), grammar_data, relevant_bonds = bonds
+                )
+                post_atom_constraints!(solver, push!(copy(path), 2), grammar_data)
             else
                 throw("Unknown chain rule: $rule")
             end
@@ -195,6 +203,23 @@ function post_atom_constraints!(
             HerbConstraints.post!(solver, atom_constraint)
 
             post_atom_constraints!(solver, push!(copy(path), 3), grammar_data)
+        end
+
+        :fragment_X_exit => begin
+            rule = grammar.rules[HerbCore.get_rule(node)]
+
+            if rule == :("(-" * chain * ")")
+                post_atom_constraints!(solver, push!(copy(path), 1), grammar_data,
+                    relevant_bonds = [copy(path)])
+            elseif rule == :("(-" * fragment_X_entry * ")")
+                post_atom_constraints!(solver, push!(copy(path), 1), grammar_data)
+            end
+        end
+
+        :fragment_X_entry => begin
+            for i in eachindex(node.children)
+                post_atom_constraints!(solver, push!(copy(path), i), grammar_data)
+            end
         end
 
         :branches => begin
