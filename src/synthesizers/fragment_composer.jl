@@ -2,9 +2,8 @@ function is_bond(character::Char)::Bool
     character == '-' || character == '=' || character == '≡'
 end
 
-function make_fragment_custom_explicit(frag_smile::String, min_digit::Int)::Expr
-    frag_smile = replace(
-        frag_smile, '#' => '≡', r"\d+" => d -> string(parse(Int, d) + min_digit - 1))
+function make_fragment_custom_explicit(frag_smile::String)::Tuple{Expr, Expr}
+    frag_smile = replace(frag_smile, '#' => '≡')
 
     # Store preceding bond types of digits
     digit_bonds = Dict{Char, Char}()
@@ -57,9 +56,14 @@ function make_fragment_custom_explicit(frag_smile::String, min_digit::Int)::Expr
         result_smile, r"\([-=≡]?\[\d+\*\]\)" => "\" * fragment_X_exit * \"")
     result_smile = replace(result_smile, r"[-=≡]?\[\d+\*\]" => "\" * fragment_X_exit * \"")
 
-    rule_str = "fragment_X_entry = \"" * result_smile * "\""
-    rule_str = replace(rule_str, " * \"\"" => "")
-    Meta.parse(rule_str)
+    entry_rule = "fragment_X_entry = \"" * result_smile * "\""
+    entry_rule = replace(entry_rule, " * \"\"" => "")
+
+    starting_smile = replace(result_smile, r"\](?:[-=≡]?\d+)*" => s -> s * "\" * fragment_X_exit * \""; count=1)
+    starting_rule = "starting_fragment = \"" * starting_smile * "\""
+    starting_rule = replace(starting_rule, " * \"\"" => "")
+
+    return (Meta.parse(entry_rule), Meta.parse(starting_rule))
 end
 
 function make_fragment_rdkit_explicit(frag_smiles::String)::String
@@ -72,11 +76,11 @@ function has_connection_points(frag_smiles::String)::Bool
     '*' in frag_smiles
 end
 
-function parse_molecule_to_fragment_rules(
-        mol_smiles::String; min_digit::Int = 1)::Vector{Expr}
+function parse_molecule_to_fragment_rules(mol_smiles::String)::Tuple{Vector{Expr}, Vector{Expr}}
     brics_smiles = MoleculeFlow.brics_decompose(
         MoleculeFlow.mol_from_smiles(mol_smiles); min_fragment_size = 2)
     filter!(has_connection_points, brics_smiles)
     map!(make_fragment_rdkit_explicit, brics_smiles)
-    return map(x -> make_fragment_custom_explicit(x, min_digit), brics_smiles)
+    tuples = map(x -> make_fragment_custom_explicit(x), brics_smiles)
+    return (first.(tuples), last.(tuples))
 end

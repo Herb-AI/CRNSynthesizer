@@ -25,6 +25,17 @@ function HerbConstraints.shouldschedule(
         end
     end
 
+    node = get_node_at_location(solver, path)
+    type = get_node_type(solver.grammar, node)
+
+    # If the update was in a fragment that can contain ringbonds,
+    # we need to schedule and recompute the incompatible groups
+    if type == :fragment_X_entry || type == :starting_fragment
+        constraint.ringbond_paths, constraint.connected_groups, _ = get_ringbond_paths(
+            solver, constraint.path)
+        return true
+    end
+
     return false
 end
 
@@ -343,9 +354,17 @@ function get_ringbond_paths(
                 solver, push!(copy(path), 2), forbidden_group = forbidden_group
             )
         end
-        :fragment_X_entry => begin
+        :fragment_X_entry || :starting_fragment => begin
             if !isfilled(node)
-                return [], [], []
+                all_ringbonds = Vector{Tuple{Vector{Int}, Vector{Int}}}()
+                all_forbidden = Vector{Vector{Vector{Int}}}()
+                for child_id in eachindex(node.children)
+                    child_ringbonds, child_forbidden,
+                    _ = get_ringbond_paths(solver, push!(copy(path), child_id))
+                    append!(all_ringbonds, child_ringbonds)
+                    append!(all_forbidden, child_forbidden)
+                end
+                return all_ringbonds, all_forbidden, []
             end
             rule = solver.grammar.rules[HerbCore.get_rule(node)]
             connects_to_single_atom = false
@@ -371,6 +390,7 @@ function get_ringbond_paths(
                     child_node = get_node_at_location(
                         solver, push!(copy(path), children_count))
                     if !isfilled(child_node)
+                        throw("Unfilled child node at path: $(push!(copy(path), children_count))")
                         continue
                     end
                     child_rule = solver.grammar.rules[HerbCore.get_rule(child_node)]
@@ -400,11 +420,13 @@ function get_ringbond_paths(
                     return get_ringbond_paths(
                         solver, push!(copy(path), 1), forbidden_group = forbidden_group)
                 end
-                :("(-" * digit * ")") => begin
-                    throw("The fragment ringbond branch should've been handled in fragment_X_entry")
+                # Push temporary ringbond path to check for parity of ringbonds in the molecule
+                # The correct path will be updated when fragment_X_entry/starting_fragment is filled
+                :("-" * digit) => begin
+                    return [(copy(path), [-1])], [], []
                 end
                 _ => return get_ringbond_paths(
-                    solver, push!(copy(path), 1), forbidden_group = forbidden_group)
+                    solver, push!(copy(path), 2), forbidden_group = forbidden_group)
             end
         end
         _ => throw("Unknown node type: $type")

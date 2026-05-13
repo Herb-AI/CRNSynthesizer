@@ -211,12 +211,12 @@ function post_atom_constraints!(
             if rule == :("(-" * chain * ")")
                 post_atom_constraints!(solver, push!(copy(path), 1), grammar_data,
                     relevant_bonds = [copy(path)])
-            elseif rule == :("(-" * fragment_X_entry * ")")
-                post_atom_constraints!(solver, push!(copy(path), 1), grammar_data)
+            elseif rule == :("(" * special_bond * fragment_X_entry * ")")
+                post_atom_constraints!(solver, push!(copy(path), 2), grammar_data)
             end
         end
 
-        :fragment_X_entry => begin
+        :fragment_X_entry || :starting_fragment => begin
             for i in eachindex(node.children)
                 post_atom_constraints!(solver, push!(copy(path), i), grammar_data)
             end

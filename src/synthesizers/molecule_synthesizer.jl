@@ -1,8 +1,10 @@
 function synthesize_molecules(
         atoms::Vector{Atom}, settings::SynthesizerSettings,
-        starting_element::Union{Symbol, AbstractRuleNode} = :molecule; fragment_rules::Vector{Expr} = Expr[]
+        starting_element::Union{Symbol, AbstractRuleNode} = :molecule; fragment_rules::Vector{Expr} = Expr[],
+        starting_fragments::Vector{Expr} = Expr[]
 )::Vector{Molecule}
-    grammar = SMILES_grammar(atoms; settings = settings, fragment_rules = fragment_rules)
+    grammar = SMILES_grammar(atoms; settings = settings, fragment_rules = fragment_rules,
+        starting_fragments = starting_fragments)
     iterator = get_iterator(settings, grammar, starting_element)
 
     candidates = Vector{Molecule}()
@@ -15,7 +17,8 @@ function synthesize_molecules(
         if isnothing(mol)
             throw("Synthesized invalid molecule: $smiles")
         end
-        if haskey(settings.options, :new_unique_candidates) && settings.options[:new_unique_candidates]
+        if haskey(settings.options, :rdkit_unique_candidates) &&
+           settings.options[:rdkit_unique_candidates]
             canon_smiles = RDKitMinimalLib.get_smiles(mol)
             if !(canon_smiles in unique_smiles)
                 push!(candidates, molecule)

@@ -207,9 +207,23 @@ function from_SMILES(smiles::String)
             if !isempty(branch_stack)
                 current_atom_idx = pop!(branch_stack)
             end
-        elseif isdigit(char)
+        elseif char == '%' || isdigit(char)
             # Ring closure
-            ring_num = parse(Int, string(char))
+            if char == '%'
+                # Find all subsequent digits
+                j = nextind(processed_smiles, i)
+                while j <= lastindex(processed_smiles) && isdigit(processed_smiles[j])
+                    j = nextind(processed_smiles, j)
+                end
+                
+                # Extract the multi-digit number
+                ring_str = processed_smiles[nextind(processed_smiles, i):prevind(processed_smiles, j)]
+                ring_num = parse(Int, ring_str)
+                
+                i = prevind(processed_smiles, j)
+            else
+                ring_num = parse(Int, string(char))
+            end
 
             if haskey(ring_connections, ring_num)
                 # Close the ring
@@ -313,7 +327,15 @@ function to_SMILES(molecule::Molecule)::String
 
         if haskey(ringbonds, atom_idx)
             for ringbond in ringbonds[atom_idx]
-                result *= ringbond[2] * string(ringbond[1])
+                ring_num = ringbond[1]
+                bond_str = ringbond[2]
+                
+                # Prepend '%' if the ring number is double-digit
+                if ring_num > 9
+                    result *= bond_str * "%" * string(ring_num)
+                else
+                    result *= bond_str * string(ring_num)
+                end
             end
         end
 
