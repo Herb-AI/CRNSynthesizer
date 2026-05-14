@@ -44,7 +44,7 @@ function SMILES_grammar(
     @assert length(grammar.rules)==21 "Length of static molecule grammar changed. Ensure the indices of static rules in the constraints below are updated accordingly."
 
     if isempty(starting_fragments)
-        addconstraint!(grammar, Forbidden((@c_rulenode 1)))
+        remove_rule!(grammar, 1)
     else
         for rule in starting_fragments
             grammar = add_rule!(grammar, rule)
@@ -52,8 +52,8 @@ function SMILES_grammar(
     end
 
     if isempty(fragment_rules)
-        addconstraint!(grammar, Forbidden((@c_rulenode 3)))
-        addconstraint!(grammar, Forbidden((@c_rulenode 7)))
+        remove_rule!(grammar, 3)
+        remove_rule!(grammar, 7)
     else
         for rule in fragment_rules
             grammar = add_rule!(grammar, rule)

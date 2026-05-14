@@ -92,7 +92,8 @@ for (name, problem, molecules_goal, reactions_goal, network_goal) in PROBLEMS
     # ------------- Until Reactions Found -------------------
     # -------------------------------------------------------
 
-    # Pipeline: Atoms -> Reactions
+    # Pipelines without molecule step are not feasible based on Wijers conclusions
+    #= Pipeline: Atoms -> Reactions
     settings = SynthesizerSettings(;
         max_time = max_time, max_depth = 10, goal = reactions_goal, benchmark_type = UntilFound
     )
@@ -108,7 +109,7 @@ for (name, problem, molecules_goal, reactions_goal, network_goal) in PROBLEMS
         println(
             "\033[31m  Missing goal reactions: $(setdiff(reactions_goal, Set(candidates)))\033[0m",
         )
-    end
+    end =#
 
     # Pipeline: Molecules -> Reactions
     reaction_settings = SynthesizerSettings(;
@@ -134,7 +135,7 @@ for (name, problem, molecules_goal, reactions_goal, network_goal) in PROBLEMS
     # ----------------- Until Network Found -----------------
     # -------------------------------------------------------
 
-    #= DNF for every problem =#
+    #= DNF for every problem 
     # Pipeline: Problem -> Networks
     settings = SynthesizerSettings(;
         max_time = max_time, max_depth = 10, goal = [network_goal], benchmark_type = UntilFound
@@ -149,7 +150,7 @@ for (name, problem, molecules_goal, reactions_goal, network_goal) in PROBLEMS
         println(
             "\033[31m  Missing goal networks: $(setdiff([network_goal], Set(networks)))\033[0m",
         )
-    end
+    end =#
 
     # Pipeline: Problem -> Molecules -> Networks
     molecule_settings = SynthesizerSettings(;
@@ -180,7 +181,7 @@ for (name, problem, molecules_goal, reactions_goal, network_goal) in PROBLEMS
         )
     end
 
-    #= DNF for every problem except water (still takes 500 seconds for water) =#
+    #= DNF for every problem except water (still takes 500 seconds for water)
     # Pipeline: Problem -> Reactions -> Networks
     reaction_settings = SynthesizerSettings(;
         max_time = max_time, max_depth = 10, goal = reactions_goal, benchmark_type = UntilFound
@@ -208,7 +209,7 @@ for (name, problem, molecules_goal, reactions_goal, network_goal) in PROBLEMS
         println(
             "\033[31m  Missing goal reactions: $(setdiff(reactions_goal, Set(reactions)))\033[0m",
         )
-    end
+    end =#
 
     # Pipeline: Problem -> Molecules -> Reactions -> Networks
     molecules_goal = unique(vcat(get_molecules(problem), molecules_goal))

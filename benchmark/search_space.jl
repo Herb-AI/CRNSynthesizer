@@ -52,8 +52,9 @@ println(
 # ----------------------------------------------------------
 # ------------------- Reactions from Atoms -----------------
 # ----------------------------------------------------------
-
-# Problem Definition
+# Reactions from Atoms is not supported with fragment rules
+# Based on Wijers conclusions that pipelines without molecule step are not feasible
+#= Problem Definition
 max_depth = 8
 
 # Get a baseline for the amount of unique reactions that can be generated
@@ -118,7 +119,7 @@ end
 println(
     "Without BalancedReaction and Ordered constraints: Generated $(length(candidates)) reactions in $(elapsed_time) seconds.",
 )
-
+=#
 # ----------------------------------------------------------
 # ------------------- Reactions from Molecules -------------
 # ----------------------------------------------------------

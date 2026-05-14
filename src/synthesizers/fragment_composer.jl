@@ -79,6 +79,7 @@ end
 function parse_molecule_to_fragment_rules(mol_smiles::String)::Tuple{Vector{Expr}, Vector{Expr}}
     brics_smiles = MoleculeFlow.brics_decompose(
         MoleculeFlow.mol_from_smiles(mol_smiles); min_fragment_size = 2)
+    ismissing(brics_smiles) && return (Expr[], Expr[])
     filter!(has_connection_points, brics_smiles)
     map!(make_fragment_rdkit_explicit, brics_smiles)
     tuples = map(x -> make_fragment_custom_explicit(x), brics_smiles)

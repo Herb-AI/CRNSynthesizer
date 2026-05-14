@@ -14,7 +14,8 @@ function synthesize_molecules(
         molecule = interpret_molecule(program, grammar)
         smiles = to_SMILES(molecule)
         mol = RDKitMinimalLib.get_mol(replace(smiles, "≡" => "#"))
-        if isnothing(mol)
+        if isnothing(mol) && !(haskey(settings.options, :disable_valid_smiles) &&
+           settings.options[:disable_valid_smiles])
             throw("Synthesized invalid molecule: $smiles")
         end
         if haskey(settings.options, :rdkit_unique_candidates) &&

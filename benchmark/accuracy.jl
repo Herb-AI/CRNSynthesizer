@@ -102,7 +102,7 @@ for (name, problem, num_molecules, num_reactions, num_networks, network_goal) in
         max_time = max_time, max_programs = num_networks, max_depth = 10
     )
 
-    #= DNF for every problem =#
+    #= DNF for every problem Pipelines without molecule step are not feasible based on Wijers conclusions
     # Pipeline: Problem -> Networks
     elapsed_time = @elapsed networks = synthesize_networks(problem, network_settings)
     println(
@@ -112,7 +112,7 @@ for (name, problem, num_molecules, num_reactions, num_networks, network_goal) in
         elapsed_time,
         " seconds."
     )
-    rank_networks(pbar, networks, problem, network_goal)
+    rank_networks(pbar, networks, problem, network_goal) =#
 
     # Pipeline: Problem -> Molecules -> Networks
     elapsed_time = @elapsed (networks,
@@ -128,8 +128,8 @@ for (name, problem, num_molecules, num_reactions, num_networks, network_goal) in
     )
     rank_networks(pbar, networks, problem, network_goal)
 
-    #= DNF for every problem =#
-    # Pipeline: Problem -> Reactions -> Networks
+    #= DNF for every problem Pipelines without molecule step are not feasible based on Wijers conclusions =#
+    #= Pipeline: Problem -> Reactions -> Networks
     elapsed_time = @elapsed (networks,
         reactions) = synthesize_networks_2(
         problem, reaction_settings, network_settings, initial_reactions_count = num_reactions
@@ -141,7 +141,7 @@ for (name, problem, num_molecules, num_reactions, num_networks, network_goal) in
         elapsed_time,
         " seconds."
     )
-    rank_networks(pbar, networks, problem, network_goal)
+    rank_networks(pbar, networks, problem, network_goal) =#
 
     # Pipeline: Problem -> Molecules -> Reactions -> Networks
     elapsed_time = @elapsed (networks,

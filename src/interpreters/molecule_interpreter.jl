@@ -21,10 +21,6 @@ function interpret_molecule(program::AbstractRuleNode, grammar::AbstractGrammar)
         end
         :(starting_fragment) => begin
             smiles = interpret_fragment_X_entry(program.children[1], grammar, min_digit)
-            mol = RDKitMinimalLib.get_mol(replace(smiles, "≡" => "#"))
-            if isnothing(mol)
-                throw("Synthesized invalid molecule: $smiles")
-            end
             return from_SMILES(smiles)
         end
 
