@@ -3,7 +3,7 @@ function count_digits(program::AbstractRuleNode, grammar::AbstractGrammar)::Int
     if type == :digit
         return 1
     end
-    return sum(count_digits(child, grammar) for child in program.children; init=0)
+    return sum(count_digits(child, grammar) for child in program.children; init = 0)
 end
 
 function interpret_molecule(program::AbstractRuleNode, grammar::AbstractGrammar)::Molecule
@@ -13,7 +13,7 @@ function interpret_molecule(program::AbstractRuleNode, grammar::AbstractGrammar)
         return rule
     end
 
-    min_digit = Ref{Int64}(count_digits(program, grammar) ÷ 2 + 1) 
+    min_digit = Ref{Int64}(count_digits(program, grammar) ÷ 2 + 1)
 
     @match rule begin
         :(chain) => begin
@@ -28,7 +28,8 @@ function interpret_molecule(program::AbstractRuleNode, grammar::AbstractGrammar)
     end
 end
 
-function interpret_chain(program::AbstractRuleNode, grammar::AbstractGrammar, min_digit::Ref{Int64})::String
+function interpret_chain(
+        program::AbstractRuleNode, grammar::AbstractGrammar, min_digit::Ref{Int64})::String
     rule = grammar.rules[get_rule(program)]
 
     @match rule begin
@@ -56,9 +57,10 @@ function interpret_chain(program::AbstractRuleNode, grammar::AbstractGrammar, mi
             return atom_str * ringbonds_str
         end
 
-        :(structure * "-" * fragment_X_entry) => begin
+        :(structure * "-" * $fragment_X_entry) => begin
             structure_str = interpret_structure(program.children[1], grammar, min_digit)
-            fragment_X_entry_str = interpret_fragment_X_entry(program.children[2], grammar, min_digit)
+            fragment_X_entry_str = interpret_fragment_X_entry(
+                program.children[2], grammar, min_digit)
             return structure_str * "-" * fragment_X_entry_str
         end
 
@@ -66,11 +68,13 @@ function interpret_chain(program::AbstractRuleNode, grammar::AbstractGrammar, mi
     end
 end
 
-function create_digit_mapping(digit_map::Dict{String, String}, arg::String, min_digit::Ref{Int64})
+function create_digit_mapping(
+        digit_map::Dict{String, String}, arg::String, min_digit::Ref{Int64})
     for m in eachmatch(r"\d", arg)
         d = m.match
         if !haskey(digit_map, d)
-            digit_map[d] = min_digit[] >= 10 ? "%" * string(min_digit[]) : string(min_digit[])
+            digit_map[d] = min_digit[] >= 10 ? "%" * string(min_digit[]) :
+                           string(min_digit[])
             min_digit[] += 1 # Increment the global digit counter
         end
     end
@@ -99,14 +103,9 @@ function interpret_fragment_X_entry(
             mapped_arg = replace(arg, r"\d" => m -> digit_map[m])
             result *= mapped_arg
         else
-            @match arg begin
-                :fragment_X_exit => begin
-                    child_count += 1
-                    result *= interpret_fragment_X_exit(
-                        program.children[child_count], grammar, min_digit)
-                end
-                _ => throw(ArgumentError("Unknown fragment exit rule: $arg"))
-            end
+            child_count += 1
+            result *= interpret_fragment_X_exit(
+                program.children[child_count], grammar, min_digit)
         end
     end
     return result
@@ -123,8 +122,9 @@ function interpret_fragment_X_exit(
         :("-" * digit) => begin
             return "-" * interpret_digit(program.children[1], grammar)
         end
-        :("(" * special_bond * fragment_X_entry * ")") => begin
-            return "(-" * interpret_fragment_X_entry(program.children[2], grammar, min_digit) * ")"
+        :("(" * special_bond * $fragment_X_entry * ")") => begin
+            return "(-" *
+                   interpret_fragment_X_entry(program.children[2], grammar, min_digit) * ")"
         end
         _ => throw(ArgumentError("Unknown fragment exit rule: $rule"))
     end
@@ -134,7 +134,8 @@ function interpret_bond(program::AbstractRuleNode, grammar::AbstractGrammar)::St
     return grammar.rules[get_rule(program)]
 end
 
-function interpret_structure(program::AbstractRuleNode, grammar::AbstractGrammar, min_digit::Ref{Int64})::String
+function interpret_structure(
+        program::AbstractRuleNode, grammar::AbstractGrammar, min_digit::Ref{Int64})::String
     rule = grammar.rules[get_rule(program)]
 
     @match rule begin
@@ -191,7 +192,8 @@ function interpret_digit(program::AbstractRuleNode, grammar::AbstractGrammar)::S
     return grammar.rules[get_rule(program)]
 end
 
-function interpret_branches(program::AbstractRuleNode, grammar::AbstractGrammar, min_digit::Ref{Int64})::String
+function interpret_branches(
+        program::AbstractRuleNode, grammar::AbstractGrammar, min_digit::Ref{Int64})::String
     rule = grammar.rules[get_rule(program)]
 
     @match rule begin
@@ -210,7 +212,8 @@ function interpret_branches(program::AbstractRuleNode, grammar::AbstractGrammar,
     end
 end
 
-function interpret_branch(program::AbstractRuleNode, grammar::AbstractGrammar, min_digit::Ref{Int64})::String
+function interpret_branch(
+        program::AbstractRuleNode, grammar::AbstractGrammar, min_digit::Ref{Int64})::String
     rule = grammar.rules[get_rule(program)]
 
     @match rule begin

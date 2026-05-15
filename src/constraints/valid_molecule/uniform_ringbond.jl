@@ -30,7 +30,7 @@ function HerbConstraints.shouldschedule(
 
     # If the update was in a fragment that can contain ringbonds,
     # we need to schedule and recompute the incompatible groups
-    if type == :fragment_X_entry || type == :starting_fragment
+    if type == :starting_fragment || (type isa Symbol && endswith(string(type), "_entry"))
         constraint.ringbond_paths, constraint.connected_groups, _ = get_ringbond_paths(
             solver, constraint.path)
         return true
@@ -274,7 +274,7 @@ function get_ringbond_paths(
                     return ringbonds_paths, [forbidden_group], ringbonds_group
                 end
                 :(structure * "-" *
-                fragment_X_entry) => begin
+                $fragment_X_entry) => begin
                     structure_ringbonds, structure_forbidden,
                     ringbond_group = get_ringbond_paths(
                         solver,
@@ -354,7 +354,7 @@ function get_ringbond_paths(
                 solver, push!(copy(path), 2), forbidden_group = forbidden_group
             )
         end
-        :fragment_X_entry || :starting_fragment => begin
+        t::Symbol && if endswith(string(t), "_entry") || startswith(string(t), "starting_") end => begin
             if !isfilled(node)
                 all_ringbonds = Vector{Tuple{Vector{Int}, Vector{Int}}}()
                 all_forbidden = Vector{Vector{Vector{Int}}}()
@@ -413,7 +413,7 @@ function get_ringbond_paths(
 
             return all_ringbonds, all_forbidden, []
         end
-        :fragment_X_exit => begin
+        t::Symbol && if endswith(string(t), "_exit") end => begin
             rule = solver.grammar.rules[HerbCore.get_rule(node)]
             @match rule begin
                 :("(-" * chain * ")") => begin

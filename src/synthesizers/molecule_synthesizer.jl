@@ -1,6 +1,7 @@
 function synthesize_molecules(
         atoms::Vector{Atom}, settings::SynthesizerSettings,
-        starting_element::Union{Symbol, AbstractRuleNode} = :molecule; fragment_rules::Vector{Expr} = Expr[],
+        starting_element::Union{Symbol, AbstractRuleNode} = :molecule; fragment_rules::Dict{
+            Int, Vector{Expr}} = Dict{Int, Vector{Expr}}(),
         starting_fragments::Vector{Expr} = Expr[]
 )::Vector{Molecule}
     grammar = SMILES_grammar(atoms; settings = settings, fragment_rules = fragment_rules,
@@ -15,7 +16,7 @@ function synthesize_molecules(
         smiles = to_SMILES(molecule)
         mol = RDKitMinimalLib.get_mol(replace(smiles, "≡" => "#"))
         if isnothing(mol) && !(haskey(settings.options, :disable_valid_smiles) &&
-           settings.options[:disable_valid_smiles])
+             settings.options[:disable_valid_smiles])
             throw("Synthesized invalid molecule: $smiles")
         end
         if haskey(settings.options, :rdkit_unique_candidates) &&

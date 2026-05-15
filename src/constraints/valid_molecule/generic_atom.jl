@@ -40,9 +40,7 @@ function HerbConstraints.shouldschedule(
                type == :branches ||
                type == :molecule_list ||
                type == :molecule ||
-               type == :starting_fragment ||
-               type == :fragment_X_entry ||
-               type == :fragment_X_exit
+               startswith(string(type), "fragment")
            )
            )
 end
@@ -136,16 +134,17 @@ function propagate_atoms!(
             return
         end
         rule = HerbCore.get_rule(node)
-        if type == :fragment_X_entry || type == :starting_fragment
+        if type == :starting_fragment || endswith(string(type), "_entry")
             for i in eachindex(node.children)
                 propagate_atoms!(solver, constraint, push!(copy(path), i))
             end
             return
-        elseif type == :fragment_X_exit
+        elseif endswith(string(type), "_exit")
+            rule = solver.grammar.rules[rule]
             if rule == :("(-" * chain * ")")
                 propagate_atoms!(
                     solver, constraint, push!(copy(path), 1), bond_paths = [copy(path)])
-            elseif rule == :("(" * special_bond * fragment_X_entry * ")")
+            elseif :special_bond in rule.args
                 propagate_atoms!(solver, constraint, push!(copy(path), 2))
             end
             return
@@ -211,7 +210,7 @@ function propagate_atoms!(
                 )
             end
 
-            :(structure * "-" * fragment_X_entry) => begin
+            :(structure * "-" * $fragment_X_entry) => begin
                 bond_paths = push!(copy(bond_paths), push!(copy(path), 2))
                 propagate_atoms!(
                     solver, constraint, push!(copy(path), 1),

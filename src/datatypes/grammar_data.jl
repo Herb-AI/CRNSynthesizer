@@ -104,7 +104,7 @@ function generate_atom_bond_dicts(grammar)
                     break
                 end
             end
-        elseif grammar.types[i] == :fragment_X_exit || grammar.types[i] == :fragment_X_entry
+        elseif startswith(string(grammar.types[i]), "fragment_")
             bond_dict[i] = 1
         end
     end

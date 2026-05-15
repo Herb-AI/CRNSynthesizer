@@ -21,8 +21,8 @@
     target_molecule = "C=CC(=O)N1CCC[C@H](C1)N2C3=NC=NC(=C3C(=N2)C4=CC=C(C=C4)OC5=CC=CC=C5)N"
     # println("Target molecule: ", target_molecule)
     entry_fragments, starting_fragments = parse_molecule_to_fragment_rules(target_molecule)
-    # println("Fragment rules: ", entry_fragments)
-    #println("Starting fragments: ", starting_fragments)
+    println("Fragment rules: ", entry_fragments)
+    println("Starting fragments: ", starting_fragments)
 
     
     settings = SynthesizerSettings(

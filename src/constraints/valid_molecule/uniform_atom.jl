@@ -179,7 +179,7 @@ function post_atom_constraints!(
                     grammar_data,
                     relevant_bonds = [bond_path]
                 )
-            elseif rule == :(structure * "-" * fragment_X_entry)
+            elseif "-" in rule.args
                 bond_path = push!(copy(path), 2)
                 bonds = [relevant_bonds..., bond_path]
 
@@ -205,18 +205,18 @@ function post_atom_constraints!(
             post_atom_constraints!(solver, push!(copy(path), 3), grammar_data)
         end
 
-        :fragment_X_exit => begin
+        t::Symbol && if endswith(string(t), "_exit") end => begin
             rule = grammar.rules[HerbCore.get_rule(node)]
 
             if rule == :("(-" * chain * ")")
                 post_atom_constraints!(solver, push!(copy(path), 1), grammar_data,
                     relevant_bonds = [copy(path)])
-            elseif rule == :("(" * special_bond * fragment_X_entry * ")")
+            elseif :special_bond in rule.args
                 post_atom_constraints!(solver, push!(copy(path), 2), grammar_data)
             end
         end
 
-        :fragment_X_entry || :starting_fragment => begin
+        t::Symbol && if endswith(string(t), "_entry") || startswith(string(t), "starting_") end => begin
             for i in eachindex(node.children)
                 post_atom_constraints!(solver, push!(copy(path), i), grammar_data)
             end

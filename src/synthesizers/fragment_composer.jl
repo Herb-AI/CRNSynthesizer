@@ -2,7 +2,7 @@ function is_bond(character::Char)::Bool
     character == '-' || character == '=' || character == '≡'
 end
 
-function make_fragment_custom_explicit(frag_smile::String)::Tuple{Expr, Expr}
+function make_fragment_custom_explicit(frag_smile::String)::Tuple{Int, Expr, Expr}
     frag_smile = replace(frag_smile, '#' => '≡')
 
     # Store preceding bond types of digits
@@ -51,19 +51,28 @@ function make_fragment_custom_explicit(frag_smile::String)::Tuple{Expr, Expr}
         end
     end
 
+    # Extract entry digit
+    entry_m = match(r"^\[(\d+)\*\]", result_smile)
+    entry_digit = entry_m === nothing ? "X" : entry_m.captures[1]
+
     result_smile = replace(result_smile, r"^\[\d+\*\][-=≡]?" => "")
     result_smile = replace(
-        result_smile, r"\([-=≡]?\[\d+\*\]\)" => "\" * fragment_X_exit * \"")
-    result_smile = replace(result_smile, r"[-=≡]?\[\d+\*\]" => "\" * fragment_X_exit * \"")
+        result_smile, r"\([-=≡]?\[(\d+)\*\]\)" => s -> "\" * fragment_" *
+                                                       match(r"\d+", s).match * "_exit * \"")
+    result_smile = replace(result_smile,
+        r"[-=≡]?\[(\d+)\*\]" => s -> "\" * fragment_" * match(r"\d+", s).match *
+                                     "_exit * \"")
 
-    entry_rule = "fragment_X_entry = \"" * result_smile * "\""
+    entry_rule = "fragment_" * entry_digit * "_entry = \"" * result_smile * "\""
     entry_rule = replace(entry_rule, " * \"\"" => "")
 
-    starting_smile = replace(result_smile, r"\](?:[-=≡]?\d+)*" => s -> s * "\" * fragment_X_exit * \""; count=1)
+    starting_smile = replace(result_smile,
+        r"\](?:[-=≡]?\d+)*" => s -> s * "\" * fragment_" * entry_digit * "_exit * \"";
+        count = 1)
     starting_rule = "starting_fragment = \"" * starting_smile * "\""
     starting_rule = replace(starting_rule, " * \"\"" => "")
 
-    return (Meta.parse(entry_rule), Meta.parse(starting_rule))
+    return (parse(Int, entry_digit), Meta.parse(entry_rule), Meta.parse(starting_rule))
 end
 
 function make_fragment_rdkit_explicit(frag_smiles::String)::String
@@ -76,12 +85,22 @@ function has_connection_points(frag_smiles::String)::Bool
     '*' in frag_smiles
 end
 
-function parse_molecule_to_fragment_rules(mol_smiles::String)::Tuple{Vector{Expr}, Vector{Expr}}
+function parse_molecule_to_fragment_rules(mol_smiles::String)::Tuple{
+        Dict{Int, Vector{Expr}}, Vector{Expr}}
     brics_smiles = MoleculeFlow.brics_decompose(
         MoleculeFlow.mol_from_smiles(mol_smiles); min_fragment_size = 2)
-    ismissing(brics_smiles) && return (Expr[], Expr[])
+    ismissing(brics_smiles) && return (Dict{Int, Vector{Expr}}(), Expr[])
     filter!(has_connection_points, brics_smiles)
     map!(make_fragment_rdkit_explicit, brics_smiles)
     tuples = map(x -> make_fragment_custom_explicit(x), brics_smiles)
-    return (first.(tuples), last.(tuples))
+    fragment_rules = Dict{Int, Vector{Expr}}()
+    starting_fragments = Expr[]
+    for (id, entry_rule, starting_rule) in tuples
+        if !haskey(fragment_rules, id)
+            fragment_rules[id] = Expr[]
+        end
+        push!(fragment_rules[id], entry_rule)
+        push!(starting_fragments, starting_rule)
+    end
+    return (fragment_rules, starting_fragments)
 end
