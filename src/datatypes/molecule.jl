@@ -32,8 +32,9 @@ end
 struct Molecule
     atoms::Vector{Atom}
     bonds::Vector{AbstractBond}
+    canonical_smiles::String
 
-    function Molecule(atoms::Vector{Atom}, bonds::Vector{Bond})
+    function Molecule(atoms::Vector{Atom}, bonds::Vector{Bond}, canonical_smiles::String)
         # Create a copy of atoms and sort them
         sorted_indices = sortperm(atoms; by = atom -> atom.name)
         sorted_atoms = atoms[sorted_indices]
@@ -57,7 +58,7 @@ struct Molecule
         # Sort the bonds by the new atom indices
         sort!(adjusted_bonds; by = bond -> (bond.from, bond.to))
 
-        return new(sorted_atoms, adjusted_bonds)
+        return new(sorted_atoms, adjusted_bonds, canonical_smiles)
     end
 end
 
@@ -68,7 +69,7 @@ function ==(a::Molecule, b::Molecule)
         return false
     end
 
-    if to_SMILES(a) != to_SMILES(b)
+    if a.canonical_smiles != b.canonical_smiles
         return false
     end
 
@@ -79,7 +80,7 @@ import Base.hash
 function hash(m::Molecule, h::UInt)
     h = hash(:Molecule, h)
     # println("Hashing molecule: ", m)
-    h = hash(to_SMILES(m), h)
+    h = hash(m.canonical_smiles, h)
     return h
 end
 
@@ -245,7 +246,12 @@ function from_SMILES(smiles::String)
         i = nextind(processed_smiles, i)
     end
 
-    return Molecule(atoms, bonds)
+    mol = RDKitMinimalLib.get_mol(replace(smiles, "≡" => "#"))
+    if isnothing(mol)
+        @error "Invalid molecule: $smiles"
+    end
+    canonical_smiles = isnothing(mol) ? smiles : RDKitMinimalLib.get_smiles(mol)
+    return Molecule(atoms, bonds, canonical_smiles)
 end
 
 function to_SMILES(molecule::Molecule)::String

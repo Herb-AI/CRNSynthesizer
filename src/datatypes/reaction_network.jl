@@ -321,27 +321,36 @@ function count_reactions(network)
     return length(network.reactions)
 end
 
-function compare(mol1, mol2)
-    # Compare two molecules and return a score based on the number of matching atoms
-    # This is a placeholder function; a better comparison would consider atom positions, bonds, etc.
-    return length(intersect(mol1.atoms, mol2.atoms))
+function get_bond_inventory(molecules)
+    inventory = Dict{String, Int}()
+    
+    for (number, mol) in molecules
+        for bond in mol.bonds
+            atom1 = string(mol.atoms[bond.from].name)
+            atom2 = string(mol.atoms[bond.to].name)
+            
+            pair = sort([atom1, atom2])
+            bond_str = "$(pair[1])$(bond.bond_type)$(pair[2])"
+            
+            inventory[bond_str] = get(inventory, bond_str, 0) + number
+        end
+    end
+    return inventory
 end
 
 function bonds_changed(reaction)
-    inputs = reaction.inputs
-    outputs = reaction.outputs
-
+    input_inventory = get_bond_inventory(reaction.inputs)
+    output_inventory = get_bond_inventory(reaction.outputs)
+    
+    all_bond_types = union(keys(input_inventory), keys(output_inventory))
+    
     score = 0
-    for input in inputs
-        min_match = Inf
-        for output in outputs
-            comparison = compare(input[2], output[2])
-            if comparison < min_match
-                min_match = comparison
-            end
-        end
-        score += min_match
+    for bond_type in all_bond_types
+        in_count = get(input_inventory, bond_type, 0)
+        out_count = get(output_inventory, bond_type, 0)
+        
+        score += abs(in_count - out_count)
     end
-
-    return score
+    
+    return score ÷ 2
 end
