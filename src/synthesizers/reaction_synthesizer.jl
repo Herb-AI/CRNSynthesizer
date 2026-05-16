@@ -25,9 +25,12 @@ function synthesize_reactions(
 end
 
 function synthesize_reactions(
-        molecules::Vector{Molecule}, settings::SynthesizerSettings
+        molecules::Vector{Molecule}, settings::SynthesizerSettings;
+        known_molecules::Vector{Molecule} = Molecule[]
 )::Vector{Reaction}
-    grammar = reaction_grammar(molecules; settings = settings)
+    sorted_molecules = isempty(known_molecules) ? molecules :
+                       sort_molecules_by_similarity(molecules, known_molecules)
+    grammar = reaction_grammar(sorted_molecules; settings = settings)
     iterator = get_iterator(settings, grammar, :reaction)
 
     candidates = Vector{Reaction}()

@@ -118,7 +118,7 @@ for (name, problem, molecules_goal, reactions_goal, network_goal) in PROBLEMS
     # elapsed_time = @elapsed candidates = synthesize_reactions(get_molecules(network_goal), reaction_settings)
     molecules = unique(vcat(get_molecules(problem), molecules))
     elapsed_time = @elapsed candidates = synthesize_reactions(
-        unique(molecules), reaction_settings
+        unique(molecules), reaction_settings; known_molecules = problem.known_molecules
     )
     println(
         "[Molecules → Reactions] Found $(length(candidates)) reactions in $(elapsed_time) seconds.",
@@ -152,7 +152,7 @@ for (name, problem, molecules_goal, reactions_goal, network_goal) in PROBLEMS
         )
     end =#
 
-    # Pipeline: Problem -> Molecules -> Networks
+    #= Pipeline: Problem -> Molecules -> Networks
     molecule_settings = SynthesizerSettings(;
         max_time = max_time, max_depth = 10, goal = molecules_goal, benchmark_type = UntilFound
     )
@@ -179,7 +179,7 @@ for (name, problem, molecules_goal, reactions_goal, network_goal) in PROBLEMS
         println(
             "\033[31m  Missing goal molecules: $(setdiff(molecules_goal, Set(molecules)))\033[0m",
         )
-    end
+    end =#
 
     #= DNF for every problem except water (still takes 500 seconds for water)
     # Pipeline: Problem -> Reactions -> Networks

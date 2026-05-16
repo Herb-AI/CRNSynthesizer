@@ -38,6 +38,7 @@ include("interpreters/network_interpreter.jl")
 include("iterators/top_down.jl")
 #include("iterators/bottom_up.jl")
 
+include("synthesizers/similarity.jl")
 include("synthesizers/molecule_synthesizer.jl")
 include("synthesizers/reaction_synthesizer.jl")
 include("synthesizers/network_synthesizer.jl")

@@ -25,7 +25,7 @@ function synthesize_networks(
     molecules = filter(molecules) do molecule
         return !(molecule in problem.known_molecules)
     end
-    grammar = network_grammar(molecules; problem = problem, settings = settings)
+    grammar = network_grammar(sort_molecules_by_similarity(molecules, problem.known_molecules); problem = problem, settings = settings)
 
     iterator = get_iterator(settings, grammar, :network)
     interpreter = x -> interpret_network(x, grammar)
@@ -105,7 +105,7 @@ function synthesize_networks(
         end
 
         networks_grammar = network_grammar(
-            collect(molecules); problem = problem, settings = network_settings
+            sort_molecules_by_similarity(collect(molecules), problem.known_molecules); problem = problem, settings = network_settings
         )
         network_iterator = get_iterator(network_settings, networks_grammar, :network)
         for network_program in network_iterator
@@ -179,7 +179,7 @@ function synthesize_networks_2(
         end
 
         networks_grammar = network_grammar(
-            collect(reactions); problem = problem, settings = network_settings
+            sort_reactions_by_similarity(collect(reactions), problem.known_molecules); problem = problem, settings = network_settings
         )
         network_iterator = get_iterator(network_settings, networks_grammar, :network)
         for network_program in network_iterator
@@ -257,7 +257,7 @@ function synthesize_networks(
         end
 
         reactions_grammar = reaction_grammar(
-            collect(molecules); settings = reaction_settings)
+            sort_molecules_by_similarity(collect(molecules), problem.known_molecules); settings = reaction_settings)
         reaction_iterator = get_iterator(reaction_settings, reactions_grammar, :reaction)
         for reaction_program in reaction_iterator
             reaction = interpret_reaction(reaction_program, reactions_grammar)
@@ -278,7 +278,7 @@ function synthesize_networks(
             # println("Found $(length(reactions)) reactions so far.")
 
             networks_grammar = network_grammar(
-                collect(reactions); problem = problem, settings = network_settings
+                sort_reactions_by_similarity(collect(reactions), problem.known_molecules); problem = problem, settings = network_settings
             )
             network_iterator = get_iterator(network_settings, networks_grammar, :network)
             for network_program in network_iterator
@@ -313,3 +313,5 @@ function synthesize_networks(
     return networks, reactions, molecules
     # return networks
 end
+
+# Similarity and sorting functions moved to similarity.jl

@@ -350,7 +350,7 @@ molecules = synthesize_molecules(
     atoms, SynthesizerSettings(; max_programs = 100, max_depth = 9)
 )
 molecules = unique(molecules)
-molecules = molecules[1:30]
+molecules = molecules[1:27]
 reactions = synthesize_reactions(
     molecules, SynthesizerSettings(; max_programs = 200, max_depth = 8)
 )
