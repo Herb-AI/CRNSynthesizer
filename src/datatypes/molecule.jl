@@ -32,10 +32,10 @@ end
 struct Molecule
     atoms::Vector{Atom}
     bonds::Vector{AbstractBond}
-    canonical_smiles::String
+    canonical_smiles::Union{String, Nothing}
     fingerprint::Vector{UInt8}
 
-    function Molecule(atoms::Vector{Atom}, bonds::Vector{Bond}, canonical_smiles::String, fingerprint::Vector{UInt8})
+    function Molecule(atoms::Vector{Atom}, bonds::Vector{Bond}, canonical_smiles::Union{String, Nothing}, fingerprint::Vector{UInt8})
         # Create a copy of atoms and sort them
         sorted_indices = sortperm(atoms; by = atom -> atom.name)
         sorted_atoms = atoms[sorted_indices]
@@ -248,10 +248,7 @@ function from_SMILES(smiles::String)
     end
 
     mol = RDKitMinimalLib.get_mol(replace(smiles, "≡" => "#"))
-    if isnothing(mol)
-        @error "Invalid molecule: $smiles"
-    end
-    canonical_smiles = isnothing(mol) ? smiles : RDKitMinimalLib.get_smiles(mol)
+    canonical_smiles = isnothing(mol) ? nothing : RDKitMinimalLib.get_smiles(mol, Dict{String, Any}("allBondsExplicit" => true, "allHsExplicit" => true))
     fingerprint = isnothing(mol) ? UInt8[] : RDKitMinimalLib.get_rdkit_fp_as_bytes(mol)
     return Molecule(atoms, bonds, canonical_smiles, fingerprint)
 end

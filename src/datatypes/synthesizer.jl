@@ -45,7 +45,8 @@ function SynthesizerSettings(;
 end
 
 function get_iterator(
-        settings::SynthesizerSettings, grammar::ContextSensitiveGrammar, starting_element::Union{
+        settings::SynthesizerSettings, grammar::ContextSensitiveGrammar,
+        starting_element::Union{
             Symbol, AbstractRuleNode}
 )
     @match settings.iterator begin
@@ -54,8 +55,12 @@ function get_iterator(
             grammar, starting_element, max_depth = settings.max_depth)
         DepthFirst => return DFSIterator(
             grammar, starting_element, max_depth = settings.max_depth)
-        BottomUp => return BUIterator(
-            grammar, starting_element, max_depth = settings.max_depth)
+        BottomUp => return CostBasedBottomUpIterator(
+            grammar, starting_element; max_depth = settings.max_depth,
+            max_size = 1000,
+            max_cost = Inf,
+            current_costs = ones(Float64, length(grammar.rules)),
+            program_to_outputs = p -> [interpret_partial_canonical(p, grammar)])
     end
 end
 

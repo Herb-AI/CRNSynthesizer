@@ -36,6 +36,36 @@ function HerbCore.update_rule_indices!(constraint::ValidSMILES, n_rules::Integer
     # TODO: Implement the logic to update the rule indices of the ValidSMILES constraint
 end
 
+function HerbConstraints.check_tree(constraint::ValidSMILES, tree::AbstractRuleNode)::Bool
+    return true
+end
+
+function HerbSearch.is_observationally_equivalent(
+    iter::CostBasedBottomUpIterator,
+    program::RuleNode,
+    rettype::Symbol
+)
+    fn_map_to_outputs = iter.program_to_outputs
+    if isnothing(fn_map_to_outputs)
+        return false # no function given for observational equivalence, assume not equivalent
+    end
+    outputs = fn_map_to_outputs(program)
+    if isnothing(outputs[1])
+        return true # Ignore invalid programs
+    end
+    outputs = HerbSearch._hash_outputs_to_u64vec(outputs)
+
+    bank = get_bank(iter)
+    observed = get!(HerbSearch.observed_outputs(bank), rettype, Set{Vector{UInt64}}())
+
+    if outputs in observed
+        return true
+    else
+        push!(observed, outputs)
+        return false
+    end
+end
+
 function HerbConstraints.on_new_node(
         solver::Solver, constraint::ValidSMILES, path::Vector{Int}
 )
@@ -65,6 +95,10 @@ function HerbConstraints.on_new_node(
 end
 
 function is_valid(candidate::Molecule, constraints::ValidSMILES)
+    return is_valid(candidate)
+end
+
+function is_valid(candidate::Molecule)
     atom_valences = Dict("O" => 2, "H" => 1, "C" => 4, "N" => 3)
 
     bond_orders = Dict(single => 1, double => 2, triple => 3, quadruple => 4)

@@ -6,6 +6,101 @@ function count_digits(program::AbstractRuleNode, grammar::AbstractGrammar)::Int
     return sum(count_digits(child, grammar) for child in program.children; init = 0)
 end
 
+function rdkit_validate(smiles::String)::Bool
+    mol = RDKitMinimalLib.get_mol(replace(smiles, "≡" => "#"))
+    return !isnothing(mol)
+end
+
+function replace_unpaired_digits(smiles::String)
+    ringbonds = [m.match for m in eachmatch(r"%?\d+", smiles)]
+    counts = Dict{String, Int}()
+    for r in ringbonds
+        counts[r] = get(counts, r, 0) + 1
+    end
+    
+    new_smiles = smiles
+    for (r, c) in counts
+        if c == 1
+            pat = Regex("[-=≡]$r")
+            new_smiles = replace(new_smiles, pat => s -> "(" * replace(s, r => "*") * ")")
+        end
+    end
+    return new_smiles
+end
+
+function interpret_partial_canonical(
+        program::AbstractRuleNode, grammar::AbstractGrammar)::Union{String, Nothing}
+    min_digit = Ref{Int64}(count_digits(program, grammar) ÷ 2 + 1)
+    type = grammar.types[get_rule(program)]
+
+    result = @match type begin
+        :molecule => begin
+            mol = interpret_molecule(program, grammar)
+            is_valid(mol) ? mol.canonical_smiles : nothing
+        end
+        :starting_fragment_grammar => begin
+            smiles = interpret_fragment_X_entry(program, grammar, min_digit)
+            mol = from_SMILES(smiles)
+            is_valid(mol) ? mol.canonical_smiles : nothing
+        end 
+        :chain => begin
+            smiles = interpret_chain(program, grammar, min_digit)
+            safe_smiles = replace_unpaired_digits(smiles)
+            rdkit_validate(safe_smiles) ? safe_smiles * "chain" : nothing
+        end
+        :structure => begin
+            smiles = interpret_structure(program, grammar, min_digit)
+            safe_smiles = replace_unpaired_digits(smiles)
+            rdkit_validate(safe_smiles) ? safe_smiles * "structure" : nothing
+        end 
+        :atom => interpret_atom(program, grammar)
+        :digit => interpret_digit(program, grammar)
+        :bond => interpret_bond(program, grammar)
+        :special_bond => "special_bond"
+        :ringbond => interpret_ringbond(program, grammar)
+        :ringbonds => begin
+            ringbonds = interpret_ringbonds(program, grammar)
+            ringbonds == "" ? "empty_ringbonds" : ringbonds * "ringbonds"
+        end
+        :branch => begin
+            smiles = interpret_branch(program, grammar, min_digit)
+            safe_smiles = replace_unpaired_digits(smiles)
+            rdkit_validate("*" * safe_smiles) ? safe_smiles : nothing
+        end 
+        :branches => begin
+            branches = interpret_branches(program, grammar, min_digit)
+            if branches == ""
+                "empty_branches"
+            else
+                safe_branches = replace_unpaired_digits(branches)
+                rdkit_validate("*" * safe_branches) ? safe_branches * "branches" : nothing
+            end
+        end
+        _ => begin
+            type_str = string(type)
+            m = match(r"\d+", type_str)
+            num_str = m === nothing ? "" : m.match
+            if endswith(type_str, "_entry")
+                smiles = interpret_fragment_X_entry(program, grammar, min_digit)
+                safe_smiles = replace_unpaired_digits(smiles)
+                rdkit_validate("*-" * safe_smiles) ? safe_smiles * "entry" * num_str : nothing
+            elseif endswith(type_str, "_exit")
+                raw_smiles = interpret_fragment_X_exit(program, grammar, min_digit)
+                safe_smiles = replace_unpaired_digits(raw_smiles)
+                if raw_smiles[1] == '('
+                    rdkit_validate("*" * safe_smiles) ? safe_smiles * "exit" * num_str : nothing
+                else
+                    safe_smiles * "exit" * num_str
+                end
+            else
+                throw(ArgumentError("Unknown type for partial canonicalization: $type"))
+            end
+        end
+    end
+
+    return result
+end
+
 function interpret_molecule(program::AbstractRuleNode, grammar::AbstractGrammar)::Molecule
     rule = grammar.rules[get_rule(program)]
 

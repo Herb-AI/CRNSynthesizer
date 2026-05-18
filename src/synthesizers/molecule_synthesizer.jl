@@ -13,7 +13,9 @@ function synthesize_molecules(
     start_time = time()
     for program in iterator
         molecule = interpret_molecule(program, grammar)
-        push!(candidates, molecule)
+        if settings.iterator != BottomUp || is_valid(molecule)
+            push!(candidates, molecule)
+        end
 
         if check_stop_condition(settings, start_time, candidates, molecule)
             break
@@ -22,10 +24,6 @@ function synthesize_molecules(
 
     if haskey(settings.options, :unique_candidates) && settings.options[:unique_candidates]
         candidates = unique(candidates)
-    end
-
-    if !isempty(known_molecules)
-        candidates = sort_molecules_by_similarity(candidates, known_molecules)
     end
 
     return candidates
