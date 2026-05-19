@@ -57,10 +57,17 @@ function get_iterator(
             grammar, starting_element, max_depth = settings.max_depth)
         BottomUp => return CostBasedBottomUpIterator(
             grammar, starting_element; max_depth = settings.max_depth,
-            max_size = 1000,
+            max_size = typemax(Int),
             max_cost = Inf,
             current_costs = ones(Float64, length(grammar.rules)),
-            program_to_outputs = p -> [interpret_partial_canonical(p, grammar)])
+            program_to_outputs = p -> begin
+                for constraint in grammar.constraints
+                    if !HerbConstraints.check_tree(constraint, p)
+                        return [nothing]
+                    end
+                end
+                [interpret_partial_canonical(p, grammar)]
+            end)
     end
 end
 

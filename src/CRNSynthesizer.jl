@@ -25,12 +25,14 @@ include("constraints/balanced_reaction/balanced_reaction.jl")
 include("constraints/contains_molecule.jl")
 include("constraints/contains_reactions.jl")
 
+include("grammars/bu_molecule_grammar.jl")
 include("grammars/molecule_grammar.jl")
 include("grammars/reaction_grammar.jl")
 include("grammars/network_grammar.jl")
 
 include("simulators/catalyst.jl")
 
+include("interpreters/bu_molecule_interpreter.jl")
 include("interpreters/molecule_interpreter.jl")
 include("interpreters/reaction_interpreter.jl")
 include("interpreters/network_interpreter.jl")

@@ -5,16 +5,26 @@ function synthesize_molecules(
         starting_fragments::Vector{Expr} = Expr[],
         known_molecules::Vector{Molecule} = Molecule[]
 )::Vector{Molecule}
-    grammar = SMILES_grammar(atoms; settings = settings, fragment_rules = fragment_rules,
+    grammar = !haskey(settings.options, :use_bottom_up) ||
+              !settings.options[:use_bottom_up] ?
+              SMILES_grammar(atoms; settings = settings, fragment_rules = fragment_rules,
+        starting_fragments = starting_fragments) :
+              bu_SMILES_grammar(
+        atoms; settings = settings, fragment_rules = fragment_rules,
         starting_fragments = starting_fragments)
     iterator = get_iterator(settings, grammar, starting_element)
 
     candidates = Vector{Molecule}()
     start_time = time()
     for program in iterator
-        molecule = interpret_molecule(program, grammar)
-        if settings.iterator != BottomUp || is_valid(molecule)
+        if !haskey(settings.options, :use_bottom_up) || !settings.options[:use_bottom_up]
+            molecule = interpret_molecule(program, grammar)
             push!(candidates, molecule)
+        else
+            molecule = bu_interpret_molecule(program, grammar)
+            if is_valid(molecule)
+                push!(candidates, molecule)
+            end
         end
 
         if check_stop_condition(settings, start_time, candidates, molecule)

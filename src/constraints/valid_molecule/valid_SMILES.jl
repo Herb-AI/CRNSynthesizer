@@ -99,6 +99,10 @@ function is_valid(candidate::Molecule, constraints::ValidSMILES)
 end
 
 function is_valid(candidate::Molecule)
+    if isnothing(candidate.canonical_smiles)
+        return false
+    end
+
     atom_valences = Dict("O" => 2, "H" => 1, "C" => 4, "N" => 3)
 
     bond_orders = Dict(single => 1, double => 2, triple => 3, quadruple => 4)
