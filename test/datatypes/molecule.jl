@@ -38,7 +38,7 @@ end
     @testset "Constructor" begin
         atoms = [Atom("H"), Atom("O")]
         bonds = [Bond(1, 2, single)]
-        molecule = Molecule(atoms, bonds, "[H]-[O]")
+        molecule = Molecule(atoms, bonds, "[H]-[O]", Vector{UInt8}())
 
         @test length(molecule.atoms) == 2
         @test length(molecule.bonds) == 1
@@ -52,7 +52,7 @@ end
     @testset "Count atoms" begin
         atoms = [Atom("H"), Atom("O"), Atom("H")]
         bonds = [Bond(1, 2, single), Bond(2, 3, single)]
-        molecule = Molecule(atoms, bonds, "[H]-[O]-[H]")
+        molecule = Molecule(atoms, bonds, "[H]-[O]-[H]", Vector{UInt8}())
 
         atom_counts = count_atoms(molecule)
         @test atom_counts["H"] == 2
@@ -69,7 +69,7 @@ end
     @testset "To SMILES" begin
         atoms = [Atom("H"), Atom("O"), Atom("H")]
         bonds = [Bond(1, 2, single), Bond(2, 3, single)]
-        molecule = Molecule(atoms, bonds, "[H]-[O]-[H]")
+        molecule = Molecule(atoms, bonds, "[H]-[O]-[H]", Vector{UInt8}())
         smiles = to_SMILES(molecule)
         @test smiles == "[H]-[O]-[H]"
     end

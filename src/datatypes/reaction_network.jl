@@ -21,8 +21,8 @@ import Base: hash, ==
 function hash(reaction::Reaction, h::UInt)
     h = hash(reaction.rate, h)
     # Sort inputs and outputs to make hash order-insensitive
-    sorted_inputs = sort(reaction.inputs; by = x -> to_SMILES(x[2]))
-    sorted_outputs = sort(reaction.outputs; by = x -> to_SMILES(x[2]))
+    sorted_inputs = sort(reaction.inputs; by = x -> x[2].canonical_smiles)
+    sorted_outputs = sort(reaction.outputs; by = x -> x[2].canonical_smiles)
     for (count, molecule) in sorted_inputs
         h = hash((count, molecule), h)
     end
@@ -41,15 +41,15 @@ function ==(a::Reaction, b::Reaction)
     end
 
     # Compare inputs (order-insensitive)
-    inputs_a = sort(a.inputs; by = x -> to_SMILES(x[2]))
-    inputs_b = sort(b.inputs; by = x -> to_SMILES(x[2]))
+    inputs_a = sort(a.inputs; by = x -> x[2].canonical_smiles)
+    inputs_b = sort(b.inputs; by = x -> x[2].canonical_smiles)
     if inputs_a != inputs_b
         return false
     end
 
     # Compare outputs (order-insensitive)
-    outputs_a = sort(a.outputs; by = x -> to_SMILES(x[2]))
-    outputs_b = sort(b.outputs; by = x -> to_SMILES(x[2]))
+    outputs_a = sort(a.outputs; by = x -> x[2].canonical_smiles)
+    outputs_b = sort(b.outputs; by = x -> x[2].canonical_smiles)
     if outputs_a != outputs_b
         return false
     end

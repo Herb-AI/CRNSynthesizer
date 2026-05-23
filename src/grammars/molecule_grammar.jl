@@ -150,7 +150,7 @@ function starting_fragment_grammar(starting_fragments::Vector{Expr} = Expr[])
     return grammar
 end
 
-function fragment_X_grammar(id::Int, fragment_rules::Vector{Expr})
+function fragment_X_grammar(id::Int, fragment_rules::Set{Expr})
     @match id begin
         1 => begin
             grammar = @csgrammar begin
@@ -365,7 +365,7 @@ end
 
 function SMILES_grammar(
         atoms::Vector{Atom}; settings::SynthesizerSettings = SynthesizerSettings(),
-        fragment_rules::Dict{Int, Vector{Expr}} = Dict{Int, Vector{Expr}}(), starting_fragments::Vector{Expr} = Expr[]
+        fragment_rules::Dict{Int, Set{Expr}} = Dict{Int, Set{Expr}}(), starting_fragments::Vector{Expr} = Expr[]
 )
     grammar = base_grammar(atoms)
 

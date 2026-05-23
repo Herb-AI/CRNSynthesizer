@@ -86,18 +86,18 @@ function has_connection_points(frag_smiles::String)::Bool
 end
 
 function parse_molecule_to_fragment_rules(mol_smiles::String)::Tuple{
-        Dict{Int, Vector{Expr}}, Vector{Expr}}
+        Dict{Int, Set{Expr}}, Vector{Expr}}
     brics_smiles = MoleculeFlow.brics_decompose(
         MoleculeFlow.mol_from_smiles(mol_smiles); min_fragment_size = 2)
-    ismissing(brics_smiles) && return (Dict{Int, Vector{Expr}}(), Expr[])
+    ismissing(brics_smiles) && return (Dict{Int, Set{Expr}}(), Expr[])
     filter!(has_connection_points, brics_smiles)
     map!(make_fragment_rdkit_explicit, brics_smiles)
     tuples = map(x -> make_fragment_custom_explicit(x), brics_smiles)
-    fragment_rules = Dict{Int, Vector{Expr}}()
+    fragment_rules = Dict{Int, Set{Expr}}()
     starting_fragments = Expr[]
     for (id, entry_rule, starting_rule) in tuples
         if !haskey(fragment_rules, id)
-            fragment_rules[id] = Expr[]
+            fragment_rules[id] = Set{Expr}()
         end
         push!(fragment_rules[id], entry_rule)
         push!(starting_fragments, starting_rule)

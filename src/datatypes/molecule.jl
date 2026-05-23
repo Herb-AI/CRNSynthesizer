@@ -34,8 +34,9 @@ struct Molecule
     bonds::Vector{AbstractBond}
     canonical_smiles::String
     fingerprint::Vector{UInt8}
+    morgan_fingerprint::Vector{UInt8}
 
-    function Molecule(atoms::Vector{Atom}, bonds::Vector{Bond}, canonical_smiles::String, fingerprint::Vector{UInt8})
+    function Molecule(atoms::Vector{Atom}, bonds::Vector{Bond}, canonical_smiles::String, fingerprint::Vector{UInt8}, morgan_fingerprint::Vector{UInt8} = UInt8[])
         # Create a copy of atoms and sort them
         sorted_indices = sortperm(atoms; by = atom -> atom.name)
         sorted_atoms = atoms[sorted_indices]
@@ -59,7 +60,7 @@ struct Molecule
         # Sort the bonds by the new atom indices
         sort!(adjusted_bonds; by = bond -> (bond.from, bond.to))
 
-        return new(sorted_atoms, adjusted_bonds, canonical_smiles, fingerprint)
+        return new(sorted_atoms, adjusted_bonds, canonical_smiles, fingerprint, morgan_fingerprint)
     end
 end
 
@@ -253,7 +254,8 @@ function from_SMILES(smiles::String)
     end
     canonical_smiles = isnothing(mol) ? smiles : RDKitMinimalLib.get_smiles(mol)
     fingerprint = isnothing(mol) ? UInt8[] : RDKitMinimalLib.get_rdkit_fp_as_bytes(mol)
-    return Molecule(atoms, bonds, canonical_smiles, fingerprint)
+    morgan_fingerprint = isnothing(mol) ? UInt8[] : RDKitMinimalLib.get_morgan_fp_as_bytes(mol, Dict{String, Any}("radius" => 2, "nBits" => 1024))
+    return Molecule(atoms, bonds, canonical_smiles, fingerprint, morgan_fingerprint)
 end
 
 function to_SMILES(molecule::Molecule)::String

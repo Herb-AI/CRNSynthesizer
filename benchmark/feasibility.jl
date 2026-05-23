@@ -88,174 +88,113 @@ for (name, problem, molecules_goal, reactions_goal, network_goal) in PROBLEMS
         )
     end
 
-    # -------------------------------------------------------
-    # ------------- Until Reactions Found -------------------
-    # -------------------------------------------------------
-
-    # Pipelines without molecule step are not feasible based on Wijers conclusions
-    #= Pipeline: Atoms -> Reactions
-    settings = SynthesizerSettings(;
-        max_time = max_time, max_depth = 10, goal = reactions_goal, benchmark_type = UntilFound
-    )
-    elapsed_time = @elapsed candidates = synthesize_reactions(
-        get_atoms(network_goal), settings
-    )
-    println(
-        "[Atoms → Reactions] Found $(length(candidates)) reactions in $(elapsed_time) seconds.",
-    )
-    if issubset(reactions_goal, candidates)
-        println("\033[32m  All goal reactions found.\033[0m")
-    else
-        println(
-            "\033[31m  Missing goal reactions: $(setdiff(reactions_goal, Set(candidates)))\033[0m",
-        )
-    end =#
-
-    # Pipeline: Molecules -> Reactions
-    reaction_settings = SynthesizerSettings(;
-        max_time = max_time, max_depth = 10, goal = reactions_goal, benchmark_type = UntilFound
-    )
-    # elapsed_time = @elapsed candidates = synthesize_reactions(get_molecules(network_goal), reaction_settings)
-    molecules = unique(vcat(get_molecules(problem), molecules))
-    elapsed_time = @elapsed candidates = synthesize_reactions(
-        unique(molecules), reaction_settings; known_molecules = problem.known_molecules
-    )
-    println(
-        "[Molecules → Reactions] Found $(length(candidates)) reactions in $(elapsed_time) seconds.",
-    )
-    if issubset(reactions_goal, candidates)
-        println("\033[32m  All goal reactions found.\033[0m")
-    else
-        println(
-            "\033[31m  Missing goal reactions: $(setdiff(reactions_goal, candidates))\033[0m",
-        )
+    fragment_rules = Dict{Int, Set{Expr}}()
+    starting_fragments = Expr[]
+    for m in molecules_goal
+        e, s = parse_molecule_to_fragment_rules(m.canonical_smiles)
+        for (k, v) in e
+            if haskey(fragment_rules, k)
+                append!(fragment_rules[k], v)
+            else
+                fragment_rules[k] = v
+            end
+        end
+        append!(starting_fragments, s)
     end
+    starting_fragments = unique(starting_fragments)
 
-    # -------------------------------------------------------
-    # ----------------- Until Network Found -----------------
-    # -------------------------------------------------------
+    for use_fragments in [false, true]
+        println("\n  \033[1mUse Fragments: $use_fragments\033[0m")
+        
+        fr = use_fragments ? fragment_rules : Dict{Int, Set{Expr}}()
+        sf = use_fragments ? starting_fragments : Expr[]
 
-    #= DNF for every problem 
-    # Pipeline: Problem -> Networks
-    settings = SynthesizerSettings(;
-        max_time = max_time, max_depth = 10, goal = [network_goal], benchmark_type = UntilFound
-    )
-    elapsed_time = @elapsed networks = synthesize_networks(problem, settings)
-    println(
-        "[Problem → Networks] Found $(length(networks)) networks in $(elapsed_time) seconds.",
-    )
-    if issubset([network_goal], networks)
-        println("\033[32m  All goal networks found.\033[0m")
-    else
-        println(
-            "\033[31m  Missing goal networks: $(setdiff([network_goal], Set(networks)))\033[0m",
-        )
-    end =#
+        for combine_method in [:multiplicative, :additive, :pooled, :sum]
+            for metric in [:none, :simpson, :tanimoto, :tango]
+                if metric == :none && combine_method != :multiplicative
+                    continue # Only run :none once
+                end
+                println()
+                println("    \033[1mSimilarity Metric: $metric, Combine: $combine_method\033[0m")
 
-    #= Pipeline: Problem -> Molecules -> Networks
-    molecule_settings = SynthesizerSettings(;
-        max_time = max_time, max_depth = 10, goal = molecules_goal, benchmark_type = UntilFound
-    )
-    network_settings = SynthesizerSettings(;
-        max_time = max_time, max_depth = 10, goal = [network_goal], benchmark_type = UntilFound
-    )
-    elapsed_time = @elapsed (networks,
-        molecules) = synthesize_networks(
-        problem, molecule_settings, network_settings; initial_molecules_count = 100000
-    )
-    println(
-        "[Problem → Molecules → Networks] Found $(length(networks)) networks in $(elapsed_time) seconds.",
-    )
-    if issubset([network_goal], networks)
-        println("\033[32m  All goal networks found.\033[0m")
-    else
-        println(
-            "\033[31m  Missing goal networks: $(setdiff([network_goal], Set(networks)))\033[0m",
-        )
-    end
-    if issubset(molecules_goal, molecules)
-        println("\033[32m  All goal molecules found.\033[0m")
-    else
-        println(
-            "\033[31m  Missing goal molecules: $(setdiff(molecules_goal, Set(molecules)))\033[0m",
-        )
-    end =#
+                # -------------------------------------------------------
+                # ------------- Until Reactions Found -------------------
+                # -------------------------------------------------------
 
-    #= DNF for every problem except water (still takes 500 seconds for water)
-    # Pipeline: Problem -> Reactions -> Networks
-    reaction_settings = SynthesizerSettings(;
-        max_time = max_time, max_depth = 10, goal = reactions_goal, benchmark_type = UntilFound
-    )
-    network_settings = SynthesizerSettings(;
-        max_time = max_time, max_depth = 10, goal = [network_goal], benchmark_type = UntilFound
-    )
-    elapsed_time = @elapsed (networks,
-        reactions) = synthesize_networks_2(
-        problem, reaction_settings, network_settings; initial_reactions_count = 100000
-    )
-    println(
-        "[Problem → Reactions → Networks] Found $(length(networks)) networks in $(elapsed_time) seconds.",
-    )
-    if issubset([network_goal], networks)
-        println("\033[32m  All goal networks found.\033[0m")
-    else
-        println(
-            "\033[31m  Missing goal networks: $(setdiff([network_goal], Set(networks)))\033[0m",
-        )
-    end
-    if issubset(reactions_goal, reactions)
-        println("\033[32m  All goal reactions found.\033[0m")
-    else
-        println(
-            "\033[31m  Missing goal reactions: $(setdiff(reactions_goal, Set(reactions)))\033[0m",
-        )
-    end =#
+                # Pipeline: Molecules -> Reactions
+                reaction_settings = SynthesizerSettings(;
+                    max_time = max_time, max_depth = 10, goal = reactions_goal, benchmark_type = UntilFound,
+                    options = Dict{Symbol, Any}(:similarity_metric => metric, :similarity_combine => combine_method)
+                )
+                molecules_for_reactions = unique(vcat(get_molecules(problem), molecules))
+                elapsed_time = @elapsed candidates = synthesize_reactions(
+                    unique(molecules_for_reactions), reaction_settings; known_molecules = problem.known_molecules
+                )
+                println(
+                    "    [Molecules → Reactions] Found $(length(candidates)) reactions in $(elapsed_time) seconds.",
+                )
+                if issubset(reactions_goal, candidates)
+                    println("    \033[32m  All goal reactions found.\033[0m")
+                else
+                    println(
+                        "    \033[31m  Missing goal reactions: $(setdiff(reactions_goal, candidates))\033[0m",
+                    )
+                end
 
-    # Pipeline: Problem -> Molecules -> Reactions -> Networks
-    molecules_goal = unique(vcat(get_molecules(problem), molecules_goal))
-    molecule_settings = SynthesizerSettings(;
-        max_time = max_time, max_depth = 10, goal = molecules_goal, benchmark_type = UntilFound
-    )
-    reaction_settings = SynthesizerSettings(;
-        max_time = max_time, max_depth = 10, goal = reactions_goal, benchmark_type = UntilFound
-    )
-    network_settings = SynthesizerSettings(;
-        max_time = max_time, max_depth = 10, goal = [network_goal], benchmark_type = UntilFound
-    )
-    elapsed_time = @elapsed (networks,
-        reactions,
-        molecules) = synthesize_networks(
-        problem,
-        molecule_settings,
-        reaction_settings,
-        network_settings;
-        initial_molecules_count = 1000,
-        initial_reactions_count = 100000
-    )
-    println(
-        "[Problem → Molecules → Reactions → Networks] Found $(length(networks)) networks in $(elapsed_time) seconds.",
-    )
-    if issubset([network_goal], networks)
-        println("\033[32m  All goal networks found.\033[0m")
-    else
-        println(
-            "\033[31m  Missing goal networks: $(setdiff([network_goal], Set(networks)))\033[0m",
-        )
+                # -------------------------------------------------------
+                # ----------------- Until Network Found -----------------
+                # -------------------------------------------------------
+
+                # Pipeline: Problem -> Molecules -> Reactions -> Networks
+                molecule_settings = SynthesizerSettings(;
+                    max_time = max_time, max_depth = 10, goal = molecules_goal, benchmark_type = UntilFound,
+                    options = Dict{Symbol, Any}(:similarity_metric => metric, :similarity_combine => combine_method)
+                )
+                reaction_settings = SynthesizerSettings(;
+                    max_time = max_time, max_depth = 10, goal = reactions_goal, benchmark_type = UntilFound,
+                    options = Dict{Symbol, Any}(:similarity_metric => metric, :similarity_combine => combine_method)
+                )
+                network_settings = SynthesizerSettings(;
+                    max_time = max_time, max_depth = 10, goal = [network_goal], benchmark_type = UntilFound,
+                    options = Dict{Symbol, Any}(:similarity_metric => metric, :similarity_combine => combine_method)
+                )
+                elapsed_time = @elapsed (networks,
+                    reactions,
+                    found_molecules) = synthesize_networks(
+                    problem,
+                    molecule_settings,
+                    reaction_settings,
+                    network_settings;
+                    initial_molecules_count = 1000,
+                    initial_reactions_count = 10000,
+                    fragment_rules = fr,
+                    starting_fragments = sf
+                )
+                println(
+                    "    [Problem → Molecules → Reactions → Networks] Found $(length(networks)) networks in $(elapsed_time) seconds.",
+                )
+                if issubset([network_goal], networks)
+                    println("    \033[32m  All goal networks found.\033[0m")
+                else
+                    println(
+                        "    \033[31m  Missing goal networks: $(setdiff([network_goal], Set(networks)))\033[0m",
+                    )
+                end
+                if issubset(reactions_goal, reactions)
+                    println("    \033[32m  All goal reactions found.\033[0m")
+                else
+                    println(
+                        "    \033[31m  Missing goal reactions: $(setdiff(reactions_goal, Set(reactions)))\033[0m",
+                    )
+                end
+                if issubset(molecules_goal, found_molecules)
+                    println("    \033[32m  All goal molecules found.\033[0m")
+                else
+                    println(
+                        "    \033[31m  Missing goal molecules: $(setdiff(molecules_goal, Set(found_molecules)))\033[0m",
+                    )
+                end
+            end
+        end
     end
-    if issubset(reactions_goal, reactions)
-        println("\033[32m  All goal reactions found.\033[0m")
-    else
-        println(
-            "\033[31m  Missing goal reactions: $(setdiff(reactions_goal, Set(reactions)))\033[0m",
-        )
-    end
-    if issubset(molecules_goal, molecules)
-        println("\033[32m  All goal molecules found.\033[0m")
-    else
-        println(
-            "\033[31m  Missing goal molecules: $(setdiff(molecules_goal, Set(molecules)))\033[0m",
-        )
-    end
-    # println("num_molecules: $(length(molecules))")
-    # println("num_reactions: $(length(reactions))")
 end
