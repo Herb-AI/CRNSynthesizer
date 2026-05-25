@@ -67,7 +67,7 @@ function SMILES_combine_chain(bond, structure, chain)
     structure * bond * chain
 end
 
-function base_grammar(atoms::Vector{Atom})
+function base_grammar(atoms::Vector{String})
     grammar = @csgrammar begin
         molecule = chain
 
@@ -126,7 +126,7 @@ function base_grammar(atoms::Vector{Atom})
     end
 
     for atom in atoms
-        atom_str = "[" * string(atom) * "]"
+        atom_str = "[" * atom * "]"
         grammar = add_rule!(grammar, :(atom = $atom_str))
     end
 
@@ -364,7 +364,7 @@ function fragment_X_grammar(id::Int, fragment_rules::Set{Expr})
 end
 
 function SMILES_grammar(
-        atoms::Vector{Atom}; settings::SynthesizerSettings = SynthesizerSettings(),
+        atoms::Vector{String}; settings::SynthesizerSettings = SynthesizerSettings(),
         fragment_rules::Dict{Int, Set{Expr}} = Dict{Int, Set{Expr}}(), starting_fragments::Vector{Expr} = Expr[]
 )
     grammar = base_grammar(atoms)

@@ -82,22 +82,22 @@ function preprocess_problem(
     return required_molecules
 end
 
-function get_atoms(problem::ProblemDefinition)
-    atoms = Set{Atom}()
+function get_atoms(problem::ProblemDefinition)::Vector{String}
+    atoms = Set{String}()
     for molecule in problem.known_molecules
         for atom in molecule.atoms
-            push!(atoms, atom)
+            push!(atoms, atom.name)
         end
     end
     for reaction in problem.known_reactions
         for input in reaction.inputs
             for atom in input[2].atoms
-                push!(atoms, atom)
+                push!(atoms, atom.name)
             end
         end
         for output in reaction.outputs
             for atom in output[2].atoms
-                push!(atoms, atom)
+                push!(atoms, atom.name)
             end
         end
     end

@@ -102,17 +102,17 @@ function get_molecules(network::ReactionNetwork)::Vector{Molecule}
     return collect(molecules)
 end
 
-function get_atoms(network::ReactionNetwork)
-    atoms = Set{Atom}()
+function get_atoms(network::ReactionNetwork)::Vector{String}
+    atoms = Set{String}()
     for reaction in network.reactions
         for (count, molecule) in reaction.inputs
             for atom in molecule.atoms
-                push!(atoms, atom)
+                push!(atoms, atom.name)
             end
         end
         for (count, molecule) in reaction.outputs
             for atom in molecule.atoms
-                push!(atoms, atom)
+                push!(atoms, atom.name)
             end
         end
     end

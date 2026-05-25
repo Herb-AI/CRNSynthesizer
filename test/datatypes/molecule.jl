@@ -1,9 +1,10 @@
 @testitem "BondType" begin
-    @test instances(BondType) == (single, double, triple, quadruple)
+    @test instances(BondType) == (single, double, aromatic, triple, quadruple)
 
     @testset "to_string" begin
         @test to_string(single) == "-"
         @test to_string(double) == "="
+        @test to_string(aromatic) == ":"
         @test to_string(triple) == "≡"
         @test to_string(quadruple) == "≣"
     end

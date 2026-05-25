@@ -1,5 +1,5 @@
 function synthesize_molecules(
-        atoms::Vector{Atom}, settings::SynthesizerSettings,
+        atoms::Vector{String}, settings::SynthesizerSettings,
         starting_element::Union{Symbol, AbstractRuleNode} = :molecule; fragment_rules::Dict{
             Int, Set{Expr}} = Dict{Int, Set{Expr}}(),
         starting_fragments::Vector{Expr} = Expr[]

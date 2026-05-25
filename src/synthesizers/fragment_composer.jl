@@ -2,14 +2,14 @@ function is_bond(character::Char)::Bool
     character == '-' || character == '=' || character == '≡'
 end
 
-function make_fragment_custom_explicit(frag_smile::String)::Tuple{Int, Expr, Expr}
-    frag_smile = replace(frag_smile, '#' => '≡')
+function make_smiles_custom_explicit(smiles::String)::String
+    smiles = replace(smiles, '#' => '≡')
 
     # Store preceding bond types of digits
     digit_bonds = Dict{Char, Char}()
-    for (i, c) in enumerate(frag_smile)
-        if isdigit(c) && is_bond(frag_smile[i - 1])
-            digit_bonds[c] = frag_smile[i - 1]
+    for (i, c) in enumerate(smiles)
+        if isdigit(c) && is_bond(smiles[i - 1])
+            digit_bonds[c] = smiles[i - 1]
         end
     end
 
@@ -17,8 +17,8 @@ function make_fragment_custom_explicit(frag_smile::String)::Tuple{Int, Expr, Exp
     result_smile = ""
     in_bracket = false
     i = 1
-    while i <= length(frag_smile)
-        c = frag_smile[i]
+    while i <= length(smiles)
+        c = smiles[i]
         if c == '['
             in_bracket = true
             result_smile *= c
@@ -33,8 +33,8 @@ function make_fragment_custom_explicit(frag_smile::String)::Tuple{Int, Expr, Exp
 
         if !in_bracket && isletter(c)
             # Check for two-letter atoms like Cl, Br
-            if i < length(frag_smile) && isletter(frag_smile[i + 1])
-                result_smile *= "[" * frag_smile[i:(i + 1)] * "]"
+            if i < length(smiles) && isletter(smiles[i + 1])
+                result_smile *= "[" * smiles[i:(i + 1)] * "]"
                 i += 2
             else
                 result_smile *= "[" * c * "]"
@@ -45,11 +45,16 @@ function make_fragment_custom_explicit(frag_smile::String)::Tuple{Int, Expr, Exp
             i += 1
         end
 
-        if i < length(frag_smile) && isdigit(frag_smile[i]) && last(result_smile) == ']'
-            result_smile *= get(digit_bonds, frag_smile[i], '-') * frag_smile[i]
+        if i < length(smiles) && isdigit(smiles[i]) && last(result_smile) == ']'
+            result_smile *= get(digit_bonds, smiles[i], '-') * smiles[i]
             i += 1
         end
     end
+    return result_smile
+end
+
+function make_fragment_custom_explicit(smiles::String)::Tuple{Int, Expr, Expr}
+    result_smile = make_smiles_custom_explicit(smiles)
 
     # Extract entry digit
     entry_m = match(r"^\[(\d+)\*\]", result_smile)
@@ -75,10 +80,9 @@ function make_fragment_custom_explicit(frag_smile::String)::Tuple{Int, Expr, Exp
     return (parse(Int, entry_digit), Meta.parse(entry_rule), Meta.parse(starting_rule))
 end
 
-function make_fragment_rdkit_explicit(frag_smiles::String)::String
+function make_smiles_rdkit_explicit(smiles::String)::String
     MoleculeFlow.mol_to_smiles(
-        MoleculeFlow.add_hs(MoleculeFlow.mol_from_smiles(frag_smiles));
-        kekule_smiles = true, all_bonds_explicit = true)
+        MoleculeFlow.add_hs(MoleculeFlow.mol_from_smiles(smiles)); all_bonds_explicit = true)
 end
 
 function has_connection_points(frag_smiles::String)::Bool
@@ -91,7 +95,7 @@ function parse_molecule_to_fragment_rules(mol_smiles::String)::Tuple{
         MoleculeFlow.mol_from_smiles(mol_smiles); min_fragment_size = 2)
     ismissing(brics_smiles) && return (Dict{Int, Set{Expr}}(), Expr[])
     filter!(has_connection_points, brics_smiles)
-    map!(make_fragment_rdkit_explicit, brics_smiles)
+    map!(make_smiles_rdkit_explicit, brics_smiles)
     tuples = map(x -> make_fragment_custom_explicit(x), brics_smiles)
     fragment_rules = Dict{Int, Set{Expr}}()
     starting_fragments = Expr[]

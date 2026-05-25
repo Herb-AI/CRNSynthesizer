@@ -1,5 +1,5 @@
 function synthesize_networks(
-        atoms::Vector{Atom}, settings::SynthesizerSettings;
+        atoms::Vector{String}, settings::SynthesizerSettings;
         problem = ProblemDefinition()
 )::Vector{ReactionNetwork}
     grammar = network_grammar(atoms; problem = problem, settings = settings)

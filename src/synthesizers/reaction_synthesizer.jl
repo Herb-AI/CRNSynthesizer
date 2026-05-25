@@ -1,6 +1,6 @@
 
 function synthesize_reactions(
-        atoms::Vector{Atom}, settings::SynthesizerSettings
+        atoms::Vector{String}, settings::SynthesizerSettings
 )::Vector{Reaction}
     grammar = reaction_grammar(atoms; settings = settings)
     iterator = get_iterator(settings, grammar, :reaction)

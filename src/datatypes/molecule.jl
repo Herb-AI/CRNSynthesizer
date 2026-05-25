@@ -1,10 +1,12 @@
-@enum BondType single double triple quadruple
+@enum BondType single double aromatic triple quadruple
 
 function to_string(bond_type::BondType)::String
     return if bond_type == single
         "-"
     elseif bond_type == double
         "="
+    elseif bond_type == aromatic
+        ":"
     elseif bond_type == triple
         "≡"
     else
@@ -14,6 +16,8 @@ end
 
 struct Atom
     name::String
+    is_aromatic::Bool
+    Atom(name::String, is_aromatic::Bool=false) = new(name, is_aromatic)
 end
 
 abstract type AbstractBond end
@@ -143,7 +147,8 @@ function from_SMILES(smiles::String)
     atom_matches = collect(eachmatch(r"\[(.*?)\]", smiles))
     for regmatch::RegexMatch in atom_matches
         atom_name = regmatch.captures[1]  # Get the content inside brackets
-        push!(atoms, Atom(atom_name))
+        is_aromatic = islowercase(atom_name[1])
+        push!(atoms, Atom(uppercasefirst(atom_name), is_aromatic))
     end
 
     # Replace atoms with placeholders for easier parsing
@@ -190,6 +195,8 @@ function from_SMILES(smiles::String)
         elseif char == '='
             # Double bond
             current_bond_type = double
+        elseif char == ':'
+            current_bond_type = aromatic
         elseif char == '#'
             # Triple bond
             current_bond_type = triple
@@ -264,7 +271,9 @@ function to_SMILES(molecule::Molecule)::String
     end
 
     if length(molecule.atoms) == 1
-        return "[" * molecule.atoms[1].name * "]"
+        atom = molecule.atoms[1]
+        atom_name_str = atom.is_aromatic ? lowercase(atom.name[1]) * atom.name[2:end] : atom.name
+        return "[" * atom_name_str * "]"
     end
 
     # Create an adjacency and ringbond dict
@@ -333,7 +342,9 @@ function to_SMILES(molecule::Molecule)::String
     end
 
     function to_SMILES(atom_idx)
-        result = "[" * molecule.atoms[atom_idx].name * "]"
+        atom = molecule.atoms[atom_idx]
+        atom_name_str = atom.is_aromatic ? lowercase(atom.name[1]) * atom.name[2:end] : atom.name
+        result = "[" * atom_name_str * "]"
 
         if haskey(ringbonds, atom_idx)
             for ringbond in ringbonds[atom_idx]

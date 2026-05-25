@@ -20,7 +20,7 @@ function network_grammar(; settings::SynthesizerSettings = SynthesizerSettings()
 end
 
 function network_grammar(
-        atoms::Vector{Atom};
+        atoms::Vector{String};
         problem::ProblemDefinition = ProblemDefinition(),
         settings::SynthesizerSettings = SynthesizerSettings()
 )

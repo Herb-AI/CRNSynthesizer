@@ -183,7 +183,19 @@ function HerbConstraints.propagate!(solver::Solver, constraint::localUniformRing
 end
 
 function is_single_atom(smiles::String)::Bool
-    return count(==(']'), smiles) == 1
+    depth = 0
+    found_top_level = false
+    for c in smiles
+        if c == '('
+            depth += 1
+        elseif c == ')'
+            depth -= 1
+        elseif c == ']' && depth == 0
+            found_top_level && return false
+            found_top_level = true
+        end
+    end
+    return true
 end
 
 function postprocess_grouped_fragment_connection_points(
