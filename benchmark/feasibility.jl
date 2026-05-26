@@ -4,12 +4,12 @@ include("data/estherification.jl")
 include("data/water.jl")
 include("data/methane.jl")
 include("data/ethylene.jl")
-include("data/example_SYN.jl")
+include("data/SYN_problems.jl")
 
 max_time = 120
 
 PROBLEMS = [
-    (
+    #=(
         name = "Water problem with O2 missing",
         problem = water_problem(;
             selected_known_indices = [1, 3], selected_expected_indices = [1, 3]
@@ -32,11 +32,11 @@ PROBLEMS = [
         problem = estherification_problem(;
             selected_known_indices = [2, 3, 6], selected_expected_indices = [2, 3, 6]
         )
-    ),#=
+    ),=#
     (
         name = "Example missing molecule problem from SynRXN",
         problem = syn_problem(),
-    )=#
+    )
 ]
 
 for (name, problem) in PROBLEMS
@@ -71,8 +71,8 @@ for (name, problem) in PROBLEMS
         fr = use_fragments ? fragment_rules : Dict{Int, Set{Expr}}()
         sf = use_fragments ? starting_fragments : Expr[]
 
-        println("Starting fragments: ", sf)
-        println("Fragment rules: ", fr)
+        println("Number of starting fragments: ", length(sf))
+        println("Number of fragment rules: ", length(fr))
 
         # Pipeline: Atoms -> Molecules
         settings = SynthesizerSettings(;
