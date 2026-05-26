@@ -126,7 +126,7 @@ function base_grammar(atoms::Vector{String})
     end
 
     for atom in atoms
-        atom_str = "[" * atom * "]"
+        atom_str = atom
         grammar = add_rule!(grammar, :(atom = $atom_str))
     end
 
@@ -142,7 +142,6 @@ end
 function starting_fragment_grammar(starting_fragments::Vector{Expr} = Expr[])
     grammar = @csgrammar begin
         molecule = starting_fragment
-        fragment_3_exit = "(" * special_bond * fragment_1_entry * ")"
     end
     for rule in starting_fragments
         grammar = add_rule!(grammar, rule)
@@ -364,10 +363,10 @@ function fragment_X_grammar(id::Int, fragment_rules::Set{Expr})
 end
 
 function SMILES_grammar(
-        atoms::Vector{String}; settings::SynthesizerSettings = SynthesizerSettings(),
+        atom_valences::OrderedDict{String, Int}; settings::SynthesizerSettings = SynthesizerSettings(),
         fragment_rules::Dict{Int, Set{Expr}} = Dict{Int, Set{Expr}}(), starting_fragments::Vector{Expr} = Expr[]
 )
-    grammar = base_grammar(atoms)
+    grammar = base_grammar(collect(keys(atom_valences)))
 
     if !isempty(starting_fragments)
         new_grammar = starting_fragment_grammar(starting_fragments)
@@ -387,10 +386,10 @@ function SMILES_grammar(
         haskey(settings.options, :disable_valid_smiles) &&
         settings.options[:disable_valid_smiles]
     )
-        atom_dict, bond_dict = generate_atom_bond_dicts(grammar)
+        atom_dict, bond_dict = generate_atom_bond_dicts(grammar, atom_valences)
         digit_to_grammar, bond_to_grammar = generate_digit_bond_to_grammar(grammar)
         grammar_data = GrammarData(atom_dict, bond_dict, digit_to_grammar, bond_to_grammar)
-        addconstraint!(grammar, ValidSMILES(grammar_data))
+        addconstraint!(grammar, ValidSMILES(grammar_data, atom_valences))
     end
 
     return grammar

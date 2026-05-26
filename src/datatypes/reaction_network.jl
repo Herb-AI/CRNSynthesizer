@@ -102,7 +102,7 @@ function get_molecules(network::ReactionNetwork)::Vector{Molecule}
     return collect(molecules)
 end
 
-function get_atoms(network::ReactionNetwork)::Vector{String}
+#=function get_atoms(network::ReactionNetwork)::Vector{String}
     atoms = Set{String}()
     for reaction in network.reactions
         for (count, molecule) in reaction.inputs
@@ -117,7 +117,7 @@ function get_atoms(network::ReactionNetwork)::Vector{String}
         end
     end
     return collect(atoms)
-end
+end=#
 
 import Base.==
 function ==(a::ReactionNetwork, b::ReactionNetwork)

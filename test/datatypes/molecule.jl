@@ -68,7 +68,7 @@ end
     end
 
     @testset "To SMILES" begin
-        atoms = [Atom("H"), Atom("O"), Atom("H")]
+        atoms = [Atom("[H]"), Atom("[O]"), Atom("[H]")]
         bonds = [Bond(1, 2, single), Bond(2, 3, single)]
         molecule = Molecule(atoms, bonds, "[H]-[O]-[H]", Vector{UInt8}())
         smiles = to_SMILES(molecule)

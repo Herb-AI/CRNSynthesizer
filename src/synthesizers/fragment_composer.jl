@@ -1,15 +1,35 @@
 function is_bond(character::Char)::Bool
-    character == '-' || character == '=' || character == '≡'
+    character == ':' || character == '-' || character == '=' || character == '≡'
 end
 
 function make_smiles_custom_explicit(smiles::String)::String
     smiles = replace(smiles, '#' => '≡')
 
     # Store preceding bond types of digits
-    digit_bonds = Dict{Char, Char}()
+    digit_bonds_by_index = Dict{Int, Char}()
+    digit_open = Dict{Char, Tuple{Int, Char}}()
+    in_bracket = false
     for (i, c) in enumerate(smiles)
-        if isdigit(c) && is_bond(smiles[i - 1])
-            digit_bonds[c] = smiles[i - 1]
+        if c == '['
+            in_bracket = true
+        elseif c == ']'
+            in_bracket = false
+        elseif isdigit(c) && !in_bracket
+            bond = (i > 1 && is_bond(smiles[i - 1])) ? smiles[i - 1] : '-'
+            if haskey(digit_open, c)
+                first_i, first_bond = digit_open[c]
+                resolved_bond = '-'
+                if bond != '-'
+                    resolved_bond = bond
+                elseif first_bond != '-'
+                    resolved_bond = first_bond
+                end
+                digit_bonds_by_index[first_i] = resolved_bond
+                digit_bonds_by_index[i] = resolved_bond
+                delete!(digit_open, c)
+            else
+                digit_open[c] = (i, bond)
+            end
         end
     end
 
@@ -45,8 +65,8 @@ function make_smiles_custom_explicit(smiles::String)::String
             i += 1
         end
 
-        if i < length(smiles) && isdigit(smiles[i]) && last(result_smile) == ']'
-            result_smile *= get(digit_bonds, smiles[i], '-') * smiles[i]
+        if i <= length(smiles) && isdigit(smiles[i]) && last(result_smile) == ']'
+            result_smile *= get(digit_bonds_by_index, i, '-') * smiles[i]
             i += 1
         end
     end
@@ -82,7 +102,7 @@ end
 
 function make_smiles_rdkit_explicit(smiles::String)::String
     MoleculeFlow.mol_to_smiles(
-        MoleculeFlow.add_hs(MoleculeFlow.mol_from_smiles(smiles)); all_bonds_explicit = true)
+        MoleculeFlow.add_hs(MoleculeFlow.mol_from_smiles(smiles)); kekule_smiles = true, all_bonds_explicit = true)
 end
 
 function has_connection_points(frag_smiles::String)::Bool

@@ -2,6 +2,7 @@ module CRNSynthesizer
 
 using HerbGrammar, HerbSpecification, HerbSearch, HerbInterpret, HerbConstraints, HerbCore
 using MLStyle
+using DataStructures
 using Catalyst, DiffEqParamEstim, Optimization, OptimizationNLopt, OrdinaryDiffEq
 import RDKitMinimalLib, MoleculeFlow
 using Term.Progress

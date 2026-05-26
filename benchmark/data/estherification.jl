@@ -58,42 +58,14 @@ function estherification_problem(;
 
     # Define the known molecules based on selected indices
     known_molecules = all_molecules[selected_known_indices]
-
-    # Build expected profiles dictionary
-    expected_profiles = Dict{Molecule, Vector{Float64}}()
-    for (i, idx) in enumerate(selected_expected_indices)
-        if idx in selected_known_indices
-            # Find position of this molecule in known_molecules
-            known_idx = findfirst(j -> j == idx, selected_known_indices)
-            expected_profiles[known_molecules[known_idx]] = all_expected[idx]
+    goal_molecules = Vector{Molecule}()
+    for i in eachindex(all_molecules)
+        if !(i in selected_known_indices)
+            push!(goal_molecules, all_molecules[i])
         end
     end
 
-    # Define the problem
-    problem = ProblemDefinition(;
-        known_molecules = known_molecules,
-        expected_profiles = expected_profiles,
-        time_data = time_data
-    )
-
-    return problem
-end
-
-function estherification_network()
-
-    # rn = @reaction_network begin
-    #     p1, CH₂O₂ + C₂H₆O --> C₃H₆O₂ + H₂O
-    #     p2, C₃H₆O₂ + CH₄O --> C₂H₄O₂ + C₂H₆O
-    # end
-
-    all_molecules = [
-        from_SMILES("[H]-[C](=[O])-[O]-[H]"),
-        from_SMILES("[C](-[C](-[H])(-[H])-[O]-[H])(-[H])(-[H])-[H]"),
-        from_SMILES("[H]-[C](=[O])-[O]-[C](-[H])(-[H])-[C](-[H])(-[H])-[H]"),
-        from_SMILES("[H]-[O]-[H]"),
-        from_SMILES("[C](-[H])(-[H])(-[H])-[O]-[H]"),
-        from_SMILES("[C](-[H])(=[O])-[O]-[C](-[H])(-[H])-[H]")
-    ]
+    atom_valences = get_valences_from_molecules(all_molecules)
 
     reaction1 = CRNSynthesizer.Reaction(
         nothing,
@@ -106,5 +78,27 @@ function estherification_network()
         [(1, all_molecules[6]), (1, all_molecules[2])]
     )
 
-    return CRNSynthesizer.ReactionNetwork([reaction1, reaction2])
+    goal_network = CRNSynthesizer.ReactionNetwork([reaction1, reaction2])
+
+    # Build expected profiles dictionary
+    expected_profiles = Dict{Molecule, Vector{Float64}}()
+    for (i, idx) in enumerate(selected_expected_indices)
+        if idx in selected_known_indices
+            # Find position of this molecule in known_molecules
+            known_idx = findfirst(j -> j == idx, selected_known_indices)
+            expected_profiles[known_molecules[known_idx]] = all_expected[idx]
+        end
+    end
+
+    # Define the problem
+    problem = ProblemDefinition(
+        atom_valences,
+        known_molecules,
+        goal_molecules,
+        goal_network;
+        expected_profiles = expected_profiles,
+        time_data = time_data
+    )
+
+    return problem
 end

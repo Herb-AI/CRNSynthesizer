@@ -1,10 +1,7 @@
-using CRNSynthesizer
+using CRNSynthesizer, DataStructures
 
 # Problem Definition
-include("data/methane.jl")
-problem = methane_problem(;
-    selected_known_indices = [1, 3], selected_expected_indices = [1, 3])
-atoms = get_atoms(problem)
+atom_valences = OrderedDict("[H]" => 1, "[O]" => 2, "[C]" => 4)
 max_time = 60
 
 # ----------------------------------------------------------
@@ -21,7 +18,7 @@ elapsed_time = @elapsed begin
         max_depth = max_depth,
         options = Dict{Symbol, Any}(:unique_candidates => true)
     )
-    molecules = synthesize_molecules(atoms, settings)
+    molecules = synthesize_molecules(atom_valences; settings)
 end
 println(
     "Baseline: Generated $(length(molecules)) unique molecules in $(elapsed_time) seconds."
@@ -339,7 +336,7 @@ println(
 # Problem Definition
 max_depth = 4
 molecules = synthesize_molecules(
-    atoms, SynthesizerSettings(; max_programs = 100, max_depth = 9)
+    atom_valences; settings = SynthesizerSettings(; max_programs = 100, max_depth = 9)
 )
 molecules = unique(molecules)
 molecules = molecules[1:27]
@@ -355,7 +352,9 @@ elapsed_time = @elapsed begin
         max_depth = max_depth,
         options = Dict{Symbol, Any}(:unique_candidates => true)
     )
-    networks = synthesize_networks(reactions, settings; problem = problem)
+    networks = synthesize_networks(reactions, settings, methane_problem(;
+            selected_known_indices = [1, 3], selected_expected_indices = [1, 3]
+        ))
 end
 println(
     "Baseline: Generated $(length(networks)) unique networks in $(elapsed_time) seconds."
@@ -427,65 +426,40 @@ PROBLEMS = [
         name = "Water problem with O2 missing",
         problem = water_problem(;
             selected_known_indices = [1, 3], selected_expected_indices = [1, 3]
-        ),
-        molecules_goal = get_molecules(
-            water_problem(; selected_known_indices = [2], selected_expected_indices = [2])
-        ),
-        reactions_goal = get_reactions(water_network()),
-        network_goal = water_network()
+        )
     ),
     (
         name = "Methane Combustion problem with O2 and CO2 missing",
         problem = methane_problem(;
             selected_known_indices = [1, 3], selected_expected_indices = [1, 3]
-        ),
-        molecules_goal = get_molecules(
-            methane_problem(;
-            selected_known_indices = [2, 4], selected_expected_indices = [2, 4]
-        ),
-        ),
-        reactions_goal = get_reactions(methane_network()),
-        network_goal = methane_network()
+        )
     ),
     (
         name = "Ethylene problem with C₂H₄O missing",
         problem = ethylene_problem(;
             selected_known_indices = [1, 3], selected_expected_indices = [1, 3]
-        ),
-        molecules_goal = get_molecules(
-            ethylene_problem(;
-            selected_known_indices = [2], selected_expected_indices = [2])
-        ),
-        reactions_goal = get_reactions(ethylene_network()),
-        network_goal = ethylene_network()
+        )
     ),
     (
         name = "Estherification problem with H2O, CH2O2 and CH4O missing",
         problem = estherification_problem(;
             selected_known_indices = [2, 3, 6], selected_expected_indices = [2, 3, 6]
-        ),
-        molecules_goal = get_molecules(
-            estherification_problem(;
-            selected_known_indices = [1, 4, 5], selected_expected_indices = [1, 4, 5]
-        ),
-        ),
-        reactions_goal = get_reactions(estherification_network()),
-        network_goal = estherification_network()
+        )
     )
 ]
 
-for (name, prob, molecules_goal, reactions_goal, network_goal) in PROBLEMS
+for (name, problem) in PROBLEMS
     println("\n-------------------------------------------------------")
     println("\033[1mBenchmarking Search Space: $name\033[0m")
 
     # Extract and merge fragments from the target molecules
     fragment_rules = Dict{Int, Set{Expr}}()
     starting_fragments = Expr[]
-    for m in molecules_goal
+    for m in problem.known_molecules
         e, s = parse_molecule_to_fragment_rules(m.canonical_smiles)
         for (k, v) in e
             if haskey(fragment_rules, k)
-                append!(fragment_rules[k], v)
+                union!(fragment_rules[k], v)
             else
                 fragment_rules[k] = v
             end
@@ -506,7 +480,7 @@ for (name, prob, molecules_goal, reactions_goal, network_goal) in PROBLEMS
             max_depth = 6, options = Dict{Symbol, Any}(:unique_candidates => true)
         )
         elapsed_time_m = @elapsed mols = synthesize_molecules(
-            get_atoms(network_goal), molecule_settings; fragment_rules=fr, starting_fragments=sf
+            problem.atom_valences; settings = molecule_settings, fragment_rules=fr, starting_fragments=sf
         )
         println("  [Atoms → Molecules] Exhaustively found $(length(mols)) valid molecules in $(elapsed_time_m) seconds.")
 
@@ -515,7 +489,7 @@ for (name, prob, molecules_goal, reactions_goal, network_goal) in PROBLEMS
             max_depth = 6, options = Dict{Symbol, Any}(:unique_candidates => true)
         )
         elapsed_time_r = @elapsed reacts = synthesize_reactions(
-            mols, reaction_settings; known_molecules = prob.known_molecules
+            mols, reaction_settings; known_molecules = problem.known_molecules
         )
         println("  [Molecules → Reactions] Exhaustively found $(length(reacts)) valid reactions in $(elapsed_time_r) seconds.")
     end

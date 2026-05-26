@@ -1,23 +1,21 @@
 @testitem "ValidSMILES" begin
     using HerbGrammar
-
-    # Create some atoms
-    a1 = Atom("H")
-    a2 = Atom("O")
-    a3 = Atom("C")
+    using DataStructures
 
     # Settings for the synthesizer
     settings = SynthesizerSettings(
         max_depth = 4, options = Dict{Symbol, Any}(:disable_valid_smiles => true)
     )
 
+    atom_valences = OrderedDict("[H]" => 1, "[O]" => 2, "[C]" => 4)
+
     # Create a network grammar without the ValidSMILES constraint
-    without_constraint_grammar = SMILES_grammar([a1.name, a2.name, a3.name], settings = settings)
+    without_constraint_grammar = SMILES_grammar(atom_valences; settings = settings)
     without_constraint_grammar.constraints
 
     # Create a network grammar with the ValidSMILES constraint
-    with_constraint_grammar = SMILES_grammar([a1.name, a2.name, a3.name], settings = settings)
-    constraint = ValidSMILES(with_constraint_grammar)
+    with_constraint_grammar = SMILES_grammar(atom_valences; settings = settings)
+    constraint = ValidSMILES(with_constraint_grammar, atom_valences)
     addconstraint!(with_constraint_grammar, constraint)
 
     # Synthesize both options

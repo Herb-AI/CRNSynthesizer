@@ -62,7 +62,7 @@ function reaction_grammar(
         atoms::Vector{String}; settings::SynthesizerSettings = SynthesizerSettings()
 )
     grammar = reaction_grammar(; settings = settings, complete_grammar = true)
-    merge_grammars!(grammar, SMILES_grammar(atoms))
+    merge_grammars!(grammar, SMILES_grammar(atoms; settings = settings))
 
     return grammar
 end

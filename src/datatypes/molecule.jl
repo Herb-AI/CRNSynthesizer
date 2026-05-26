@@ -124,6 +124,26 @@ function count_atoms(molecule::Molecule)::Dict{String, Int}
     return atoms
 end
 
+function get_valences_from_molecules(molecules::Vector{Molecule})::OrderedDict{String, Int}
+    valences = OrderedDict{String, Int}()
+    bond_orders = Dict(single => 1.0, double => 2.0, aromatic => 1.5, triple => 3.0, quadruple => 4.0)
+    
+    for mol in molecules
+        atoms = mol.atoms
+        bonds = mol.bonds
+        for (i, atom) in enumerate(atoms)
+            connected_bonds = filter(b -> b.from == i || b.to == i, bonds)
+            if !isempty(connected_bonds)
+                total_bond_order = sum(bond_orders[b.bond_type] for b in connected_bonds)
+                valences[atom.name] = round(Int, total_bond_order)
+            else
+                valences[atom.name] = 0
+            end
+        end
+    end
+    return valences
+end
+
 function to_compact(molecule::Molecule)
     # Get the atom counts
     atoms = count_atoms(molecule)
@@ -148,7 +168,7 @@ function from_SMILES(smiles::String)
     for regmatch::RegexMatch in atom_matches
         atom_name = regmatch.captures[1]  # Get the content inside brackets
         is_aromatic = islowercase(atom_name[1])
-        push!(atoms, Atom(uppercasefirst(atom_name), is_aromatic))
+        push!(atoms, Atom("[" * uppercasefirst(atom_name) * "]", is_aromatic))
     end
 
     # Replace atoms with placeholders for easier parsing
@@ -272,8 +292,8 @@ function to_SMILES(molecule::Molecule)::String
 
     if length(molecule.atoms) == 1
         atom = molecule.atoms[1]
-        atom_name_str = atom.is_aromatic ? lowercase(atom.name[1]) * atom.name[2:end] : atom.name
-        return "[" * atom_name_str * "]"
+        atom_name_str = atom.is_aromatic ? lowercase(atom.name) : atom.name
+        return atom_name_str
     end
 
     # Create an adjacency and ringbond dict
@@ -343,8 +363,8 @@ function to_SMILES(molecule::Molecule)::String
 
     function to_SMILES(atom_idx)
         atom = molecule.atoms[atom_idx]
-        atom_name_str = atom.is_aromatic ? lowercase(atom.name[1]) * atom.name[2:end] : atom.name
-        result = "[" * atom_name_str * "]"
+        atom_name_str = atom.is_aromatic ? lowercase(atom.name) : atom.name
+        result = atom_name_str
 
         if haskey(ringbonds, atom_idx)
             for ringbond in ringbonds[atom_idx]

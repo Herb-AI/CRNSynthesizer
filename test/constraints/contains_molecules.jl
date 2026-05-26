@@ -1,5 +1,6 @@
 @testitem "ContainsMolecules" begin
     using HerbGrammar
+    using DataStructures
 
     # Create some molecules
     m1 = from_SMILES("[H]-[H]")
@@ -11,12 +12,21 @@
         max_depth = 7, options = Dict{Symbol, Any}(:disable_contains_molecules => true)
     )
 
+    # Define a problem to pass required molecules and atom valences
+    atom_valences = OrderedDict("[H]" => 1, "[O]" => 2)
+    problem = ProblemDefinition(
+        atom_valences,
+        Molecule[],
+        Molecule[],
+        ReactionNetwork(Reaction[])
+    )
+
     # Create a network grammar without the ContainsMolecules constraint
-    without_constraint_grammar = network_grammar([m1, m2, m3], settings = settings)
+    without_constraint_grammar = network_grammar([m1, m2, m3], problem, settings = settings)
 
     # Create a network grammar with the ContainsMolecules constraint
     with_constraint_grammar = network_grammar(
-        [m2, m3], settings = settings, check_required = false
+        [m2, m3], problem, settings = settings, check_required = false
     )
     constraint = ContainsMolecules(with_constraint_grammar, [(m1, INPUT)])
     addconstraint!(with_constraint_grammar, constraint)

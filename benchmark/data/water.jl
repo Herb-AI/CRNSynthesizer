@@ -33,6 +33,21 @@ function water_problem(; selected_known_indices = 1:3, selected_expected_indices
 
     # Define the known molecules based on selected indices
     known_molecules = all_molecules[selected_known_indices]
+    goal_molecules = Vector{Molecule}()
+    for i in eachindex(all_molecules)
+        if !(i in selected_known_indices)
+            push!(goal_molecules, all_molecules[i])
+        end
+    end
+
+    atom_valences = get_valences_from_molecules(all_molecules)
+
+    reaction = CRNSynthesizer.Reaction(
+        nothing, [(2, all_molecules[1]), (1, all_molecules[2])], [(2, all_molecules[3])]
+    )
+    
+
+    goal_network =  CRNSynthesizer.ReactionNetwork([reaction])
 
     # Build expected profiles dictionary
     expected_profiles = Dict{Molecule, Vector{Float64}}()
@@ -45,27 +60,14 @@ function water_problem(; selected_known_indices = 1:3, selected_expected_indices
     end
 
     # Define the problem
-    problem = ProblemDefinition(;
-        known_molecules = known_molecules,
+    problem = ProblemDefinition(
+        atom_valences,
+        known_molecules,
+        goal_molecules,
+        goal_network;
         expected_profiles = expected_profiles,
         time_data = time_data
     )
 
     return problem
-end
-
-function water_network()
-    # Define molecules using SMILES
-    all_molecules = [
-        from_SMILES("[H]-[H]"),         # H₂
-        from_SMILES("[O]=[O]"),         # O₂
-        from_SMILES("[H]-[O]-[H]")     # H₂O
-    ]
-
-    # Define the reaction: 2H₂ + O₂ --> 2H₂O
-    reaction = CRNSynthesizer.Reaction(
-        nothing, [(2, all_molecules[1]), (1, all_molecules[2])], [(2, all_molecules[3])]
-    )
-
-    return CRNSynthesizer.ReactionNetwork([reaction])
 end

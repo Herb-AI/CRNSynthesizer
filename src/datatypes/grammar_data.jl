@@ -6,6 +6,13 @@ mutable struct GrammarData
     bond_to_grammar::Dict{String, Int}
 end
 
+const bond_orders = Dict(
+    "-" => 1,
+    "=" => 2,
+    "≡" => 3,
+    "≣" => 4
+)
+
 function update_grammar_data!(
         grammar_data::GrammarData, mapping::AbstractDict{<:Integer, <:Integer}
 )
@@ -79,7 +86,7 @@ function generate_digit_bond_to_grammar(grammar)
     return digit_dict, bond_dict
 end
 
-function generate_atom_bond_dicts(grammar)
+function generate_atom_bond_dicts(grammar, atom_valences::OrderedDict{String, Int})
     atom_dict = Dict{Int, Int}()
     bond_dict = Dict{Int, Int}()
 

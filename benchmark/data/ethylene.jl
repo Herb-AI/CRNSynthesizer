@@ -34,6 +34,19 @@ function ethylene_problem(; selected_known_indices = 1:3, selected_expected_indi
 
     # Define the known molecules based on selected indices
     known_molecules = all_molecules[selected_known_indices]
+    goal_molecules = Vector{Molecule}()
+    for i in eachindex(all_molecules)
+        if !(i in selected_known_indices)
+            push!(goal_molecules, all_molecules[i])
+        end
+    end
+
+    atom_valences = get_valences_from_molecules(all_molecules)
+
+    reaction = CRNSynthesizer.Reaction(
+        nothing, [(1, all_molecules[1]), (1, all_molecules[2])], [(1, all_molecules[3])]
+    )
+    goal_network = CRNSynthesizer.ReactionNetwork([reaction])
 
     # Build expected profiles dictionary
     expected_profiles = Dict{Molecule, Vector{Float64}}()
@@ -46,27 +59,14 @@ function ethylene_problem(; selected_known_indices = 1:3, selected_expected_indi
     end
 
     # Define the problem
-    problem = ProblemDefinition(;
-        known_molecules = known_molecules,
+    problem = ProblemDefinition(
+        atom_valences,
+        known_molecules,
+        goal_molecules,
+        goal_network;
         expected_profiles = expected_profiles,
         time_data = time_data
     )
 
     return problem
-end
-
-function ethylene_network()
-    # Define molecules using SMILES
-    all_molecules = [
-        from_SMILES("[H]-[O]-[H]"),           # H₂O
-        from_SMILES("[H]-[C](-[O]-1)(-[H])-[C]-1(-[H])-[H]"),       # Ethylene oxide
-        from_SMILES("[H]-[O]-[C](-[H])(-[H])-[C](-[H])(-[H])-[O]-[H]")         # Ethylene glycol
-    ]
-
-    # Define the reaction: H₂O + C₂H₄O --> C₂H₆O₂
-    reaction = CRNSynthesizer.Reaction(
-        nothing, [(1, all_molecules[1]), (1, all_molecules[2])], [(1, all_molecules[3])]
-    )
-
-    return CRNSynthesizer.ReactionNetwork([reaction])
 end

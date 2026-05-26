@@ -17,6 +17,7 @@ is out of scope for a top-down iterator.
 end =#
 
 @testitem "Network Synthesizer (from Molecules)" begin
+    using DataStructures
 
     # Create some molecules
     m1 = from_SMILES("[H]-[H]")
@@ -25,7 +26,13 @@ end =#
 
     # Synthesize options
     settings = SynthesizerSettings(max_depth = 7)
-    networks = synthesize_networks([m1, m2, m3], settings)
+    atom_valences = OrderedDict("[H]" => 1, "[O]" => 2)
+    problem = ProblemDefinition(
+        atom_valences,
+        Molecule[],
+        Molecule[],
+        ReactionNetwork(Reaction[])
+    )
+    networks = synthesize_networks([m1, m2, m3], settings, problem)
     @test length(networks) > 0
-
 end

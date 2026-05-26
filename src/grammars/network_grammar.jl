@@ -20,13 +20,13 @@ function network_grammar(; settings::SynthesizerSettings = SynthesizerSettings()
 end
 
 function network_grammar(
-        atoms::Vector{String};
-        problem::ProblemDefinition = ProblemDefinition(),
+        atom_valences::OrderedDict{String, Int},
+        problem::ProblemDefinition;
         settings::SynthesizerSettings = SynthesizerSettings()
 )
     grammar = network_grammar()
     merge_grammars!(grammar, reaction_grammar(; settings = settings))
-    merge_grammars!(grammar, SMILES_grammar(atoms))
+    merge_grammars!(grammar, SMILES_grammar(atom_valences))
 
     # required = problem.required_molecules
     # required_rules = Vector{Tuple{Int, ReactionPosition}}()
@@ -46,9 +46,9 @@ function network_grammar(
 end
 
 function network_grammar(
-        molecules::Vector{Molecule};
-        problem::ProblemDefinition = ProblemDefinition(),
-        required_molecules::Vector{Molecule} = Vector{Molecule}(),
+        molecules::Vector{Molecule},
+        problem::ProblemDefinition,
+        required_molecules::Vector{Molecule} = Vector{Molecule}();
         settings::SynthesizerSettings = SynthesizerSettings(),
         check_required::Bool = true
 )
@@ -93,8 +93,8 @@ function network_grammar(
 end
 
 function network_grammar(
-        reactions::Vector{Reaction};
-        problem::ProblemDefinition = ProblemDefinition(),
+        reactions::Vector{Reaction},
+        problem::ProblemDefinition;
         settings::SynthesizerSettings = SynthesizerSettings()
 )
     grammar = network_grammar(; settings = settings)
@@ -157,5 +157,5 @@ end
 function network_grammar(
         problem::ProblemDefinition; settings::SynthesizerSettings = SynthesizerSettings()
 )
-    return network_grammar(get_atoms(problem); problem = problem, settings = settings)
+    return network_grammar(problem.atom_valences, problem; settings = settings)
 end

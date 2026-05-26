@@ -390,11 +390,13 @@ function get_ringbond_paths(
             args = rule isa Expr ? rule.args[2:end] : [rule]
             for arg in args
                 if arg isa String
-                    forbidden_group = postprocess_grouped_fragment_connection_points(
-                        solver, path, forbidden_group, connects_to_single_atom,
-                        all_ringbonds, all_forbidden, atom_ringbonds, branch_children)
-                    atom_ringbonds = Vector{Tuple{Vector{Int}, Vector{Int}}}()
-                    branch_children = Vector{Int}()
+                    if virtual_atom_count > 0
+                        forbidden_group = postprocess_grouped_fragment_connection_points(
+                            solver, path, forbidden_group, connects_to_single_atom,
+                            all_ringbonds, all_forbidden, atom_ringbonds, branch_children)
+                        atom_ringbonds = Vector{Tuple{Vector{Int}, Vector{Int}}}()
+                        branch_children = Vector{Int}()
+                    end
                     connects_to_single_atom = is_single_atom(arg)
                     virtual_atom_count += 1
                 else

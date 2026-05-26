@@ -1,11 +1,8 @@
 struct BalancedReaction <: AbstractGrammarConstraint
     complete_grammar::Bool
-    problem::ProblemDefinition
 
-    function BalancedReaction(;
-            complete_grammar::Bool = true, problem::ProblemDefinition = ProblemDefinition()
-    )
-        return new(complete_grammar, problem)
+    function BalancedReaction(;complete_grammar::Bool = true)
+        return new(complete_grammar)
     end
 end
 
@@ -289,12 +286,24 @@ function get_possibilities(
         rule_counts::Dict{Int, Dict{Any, Any}} = Dict{Int, Dict{Any, Any}}()
 )
 
-    # Test
-    # indices: H => 1, O => 2, N => 3, C => 4
-    atom_indices::Dict{String, Int} = Dict("H" => 1, "O" => 2, "N" => 3, "C" => 4)
+    # Build atom indices dynamically based on the elements and charges present in the grammar
+    all_keys = Set{String}()
+    for (rule, counts) in rule_counts
+        union!(all_keys, keys(counts))
+    end
+    if isempty(all_keys)
+        molecule_rules = findall(solver.grammar.domains[:molecule])
+        for rule in molecule_rules
+            union!(all_keys, keys(count_atoms(solver.grammar.rules[rule])))
+        end
+    end
+    
+    sorted_atoms = sort(collect(all_keys))
+    atom_indices = Dict{String, Int}(atom => i for (i, atom) in enumerate(sorted_atoms))
+    n_atoms = max(length(sorted_atoms), 1)
 
-    # Initialize with a single empty option
-    current_options = [(Int[0, 0, 0, 0], Int[])]
+    # Initialize with a single empty option of the correct size
+    current_options = [(zeros(Int, n_atoms), Int[])]
 
     # Process each path
     for path in paths
@@ -447,17 +456,6 @@ function HerbConstraints.propagate!(solver::Solver, constraint::LocalBalancedRea
     if !isfeasible(solver)
         return nothing
     end
-
-    # required_molecules = constraint.NetworkProperties.problem.known_molecules
-    # fixed_left = map(x -> solver.grammar.rules[x], fixed_left)
-    # fixed_right = map(x -> solver.grammar.rules[x], fixed_right)
-
-    # fixed = vcat(fixed_left, fixed_right)
-    # for f in fixed
-    #     if f in required_molecules && get_value(constraint.NetworkProperties.contains_molecules[f]) != 1
-    #         set_value!(constraint.NetworkProperties.contains_molecules[f], 1)
-    #     end
-    # end
 end
 
 function is_valid(candidate::Reaction, constraint::BalancedReaction)
