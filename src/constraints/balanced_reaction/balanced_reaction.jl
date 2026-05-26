@@ -347,17 +347,7 @@ function get_possibilities(
         atom_counts = Dict{String, Int}()
         for (i, count) in enumerate(counts)
             if count > 0
-                if i == 1
-                    atom_counts["H"] = count
-                elseif i == 2
-                    atom_counts["O"] = count
-                elseif i == 3
-                    atom_counts["N"] = count
-                elseif i == 4
-                    atom_counts["C"] = count
-                else
-                    error("Unexpected atom index: $i")
-                end
+                atom_counts[sorted_atoms[i]] = count
             end
         end
         push!(results, ReactionPossibility(rules, atom_counts))

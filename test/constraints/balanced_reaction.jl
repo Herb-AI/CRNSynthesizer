@@ -103,3 +103,32 @@ end
     )
     @test !is_valid(r_unbalanced, constraint)
 end
+
+@testitem "BalancedReaction with Dynamic Atoms (B, Br)" begin
+    using HerbGrammar
+
+    # Create some molecules with Boron and Bromine
+    m1 = from_SMILES("[B]")
+    m2 = from_SMILES("[Br]")
+    m3 = from_SMILES("[B]-[Br]")
+
+    settings = SynthesizerSettings(
+        max_depth = 5, options = Dict{Symbol, Any}(:disable_balanced_reaction => true)
+    )
+
+    without_constraint_grammar = reaction_grammar([m1, m2, m3], settings = settings)
+    with_constraint_grammar = reaction_grammar([m1, m2, m3], settings = settings)
+    
+    constraint = BalancedReaction(complete_grammar = false)
+    addconstraint!(with_constraint_grammar, constraint)
+
+    # Verify that get_possibilities compiles and executes without "Unexpected atom index" error
+    iterator = get_iterator(settings, with_constraint_grammar, :reaction)
+    interpreter = x -> interpret_reaction(x, with_constraint_grammar)
+    with_candidates = Vector{Reaction}()
+    find_programs!(iterator, settings, interpreter, with_candidates)
+
+    @test length(with_candidates) > 0
+    @test all(x -> is_valid(x, constraint), with_candidates)
+end
+
