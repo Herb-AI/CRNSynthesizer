@@ -387,10 +387,16 @@ function get_ringbond_paths(
             virtual_atom_count = 0
             children_count = 0
 
+            # Data structures for tracking matching trailing ringbonds
+            saved_atom_ringbonds = Vector{Vector{Tuple{Vector{Int}, Vector{Int}}}}()
+            digit_to_virtual_atom = Dict{Int, Int}()
+            matching_pairs = Vector{Tuple{Int, Int}}()
+
             args = rule isa Expr ? rule.args[2:end] : [rule]
             for arg in args
                 if arg isa String
                     if virtual_atom_count > 0
+                        push!(saved_atom_ringbonds, copy(atom_ringbonds))
                         forbidden_group = postprocess_grouped_fragment_connection_points(
                             solver, path, forbidden_group, connects_to_single_atom,
                             all_ringbonds, all_forbidden, atom_ringbonds, branch_children)
@@ -399,6 +405,20 @@ function get_ringbond_paths(
                     end
                     connects_to_single_atom = is_single_atom(arg)
                     virtual_atom_count += 1
+
+                    # Parse trailing ringbonds
+                    m_suffix = match(r"((?:[-=≡]?\d+)+)$", arg)
+                    if m_suffix !== nothing
+                        suffix = m_suffix.captures[1]
+                        for m_digit in eachmatch(r"\d+", suffix)
+                            digit_val = parse(Int, m_digit.match)
+                            if haskey(digit_to_virtual_atom, digit_val)
+                                prev_v_atom = digit_to_virtual_atom[digit_val]
+                                push!(matching_pairs, (prev_v_atom, virtual_atom_count))
+                            end
+                            digit_to_virtual_atom[digit_val] = virtual_atom_count
+                        end
+                    end
                 else
                     children_count += 1
                     child_node = get_node_at_location(
@@ -419,10 +439,22 @@ function get_ringbond_paths(
                 end
             end
 
+            if virtual_atom_count > length(saved_atom_ringbonds)
+                push!(saved_atom_ringbonds, copy(atom_ringbonds))
+            end
+
             if !isempty(atom_ringbonds) || !isempty(branch_children)
                 postprocess_grouped_fragment_connection_points(
                     solver, path, forbidden_group, connects_to_single_atom,
                     all_ringbonds, all_forbidden, atom_ringbonds, branch_children)
+            end
+
+            # Generate forbidden groups for matching pairs
+            for (prev_v_atom, curr_v_atom) in matching_pairs
+                forbidden_group = [x[1] for x in vcat(saved_atom_ringbonds[prev_v_atom], saved_atom_ringbonds[curr_v_atom])]
+                if !isempty(forbidden_group)
+                    push!(all_forbidden, forbidden_group)
+                end
             end
 
             return all_ringbonds, all_forbidden, []

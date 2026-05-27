@@ -17,7 +17,7 @@ end
 struct Atom
     name::String
     is_aromatic::Bool
-    Atom(name::String, is_aromatic::Bool=false) = new(name, is_aromatic)
+    Atom(name::String, is_aromatic::Bool = false) = new(name, is_aromatic)
 end
 
 abstract type AbstractBond end
@@ -40,7 +40,8 @@ struct Molecule
     fingerprint::Vector{UInt8}
     morgan_fingerprint::Vector{UInt8}
 
-    function Molecule(atoms::Vector{Atom}, bonds::Vector{Bond}, canonical_smiles::String, fingerprint::Vector{UInt8}, morgan_fingerprint::Vector{UInt8} = UInt8[])
+    function Molecule(atoms::Vector{Atom}, bonds::Vector{Bond}, canonical_smiles::String,
+            fingerprint::Vector{UInt8}, morgan_fingerprint::Vector{UInt8} = UInt8[])
         # Create a copy of atoms and sort them
         sorted_indices = sortperm(atoms; by = atom -> atom.name)
         sorted_atoms = atoms[sorted_indices]
@@ -64,7 +65,8 @@ struct Molecule
         # Sort the bonds by the new atom indices
         sort!(adjusted_bonds; by = bond -> (bond.from, bond.to))
 
-        return new(sorted_atoms, adjusted_bonds, canonical_smiles, fingerprint, morgan_fingerprint)
+        return new(
+            sorted_atoms, adjusted_bonds, canonical_smiles, fingerprint, morgan_fingerprint)
     end
 end
 
@@ -126,19 +128,47 @@ end
 
 function get_valences_from_molecules(molecules::Vector{Molecule})::OrderedDict{String, Int}
     valences = OrderedDict{String, Int}()
-    bond_orders = Dict(single => 1.0, double => 2.0, aromatic => 1.5, triple => 3.0, quadruple => 4.0)
-    
+
     for mol in molecules
-        atoms = mol.atoms
-        bonds = mol.bonds
-        for (i, atom) in enumerate(atoms)
-            connected_bonds = filter(b -> b.from == i || b.to == i, bonds)
-            if !isempty(connected_bonds)
-                total_bond_order = sum(bond_orders[b.bond_type] for b in connected_bonds)
-                valences[atom.name] = round(Int, total_bond_order)
-            else
-                valences[atom.name] = 0
+        # Check if we need to parse this molecule
+        needs_parsing = false
+        for atom in mol.atoms
+            if !haskey(valences, atom.name)
+                needs_parsing = true
+                break
             end
+        end
+
+        if !needs_parsing
+            continue
+        end
+
+        if isempty(mol.canonical_smiles)
+            throw(ArgumentError(string("Invalid input molecule: ", to_SMILES(mol))))
+        end
+
+        mf_mol = MoleculeFlow.mol_from_smiles(mol.canonical_smiles)
+        if isnothing(mf_mol) || !mf_mol.valid
+            throw(ArgumentError(string("Invalid input molecule: ", to_SMILES(mol))))
+        end
+        mf_mol = MoleculeFlow.add_hs(mf_mol)
+
+        for a in MoleculeFlow.get_atoms(mf_mol)
+            symbol = MoleculeFlow.get_symbol(a)
+            charge = MoleculeFlow.get_formal_charge(a)
+
+            name = if charge == 0
+                "[$symbol]"
+            elseif charge == 1
+                "[$symbol+]"
+            elseif charge == -1
+                "[$symbol-]"
+            elseif charge > 1
+                "[$symbol+$charge]"
+            else
+                "[$symbol$charge]"
+            end
+            valences[name] = MoleculeFlow.get_valence(a)
         end
     end
     return valences
@@ -245,11 +275,12 @@ function from_SMILES(smiles::String)
                 while j <= lastindex(processed_smiles) && isdigit(processed_smiles[j])
                     j = nextind(processed_smiles, j)
                 end
-                
+
                 # Extract the multi-digit number
-                ring_str = processed_smiles[nextind(processed_smiles, i):prevind(processed_smiles, j)]
+                ring_str = processed_smiles[nextind(
+                    processed_smiles, i):prevind(processed_smiles, j)]
                 ring_num = parse(Int, ring_str)
-                
+
                 i = prevind(processed_smiles, j)
             else
                 ring_num = parse(Int, string(char))
@@ -281,7 +312,9 @@ function from_SMILES(smiles::String)
     end
     canonical_smiles = isnothing(mol) ? smiles : RDKitMinimalLib.get_smiles(mol)
     fingerprint = isnothing(mol) ? UInt8[] : RDKitMinimalLib.get_rdkit_fp_as_bytes(mol)
-    morgan_fingerprint = isnothing(mol) ? UInt8[] : RDKitMinimalLib.get_morgan_fp_as_bytes(mol, Dict{String, Any}("radius" => 2, "nBits" => 1024))
+    morgan_fingerprint = isnothing(mol) ? UInt8[] :
+                         RDKitMinimalLib.get_morgan_fp_as_bytes(
+        mol, Dict{String, Any}("radius" => 2, "nBits" => 1024))
     return Molecule(atoms, bonds, canonical_smiles, fingerprint, morgan_fingerprint)
 end
 
@@ -370,7 +403,7 @@ function to_SMILES(molecule::Molecule)::String
             for ringbond in ringbonds[atom_idx]
                 ring_num = ringbond[1]
                 bond_str = ringbond[2]
-                
+
                 # Prepend '%' if the ring number is double-digit
                 if ring_num > 9
                     result *= bond_str * "%" * string(ring_num)

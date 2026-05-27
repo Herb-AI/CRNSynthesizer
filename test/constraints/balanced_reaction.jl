@@ -76,6 +76,12 @@ end
     valences_arom = get_valences_from_molecules([m_aromatic])
     @test valences_arom["[C]"] == 3 # each carbon has two aromatic bonds: 1.5 + 1.5 = 3.0 -> 3
 
+    # Test H2O valence extraction (with implicit hydrogens)
+    m_h2o = from_SMILES("[H]-[O]-[H]")
+    valences_h2o = get_valences_from_molecules([m_h2o])
+    @test valences_h2o["[H]"] == 1
+    @test valences_h2o["[O]"] == 2
+
     # Test reaction balancing
     constraint = BalancedReaction()
 
@@ -131,4 +137,3 @@ end
     @test length(with_candidates) > 0
     @test all(x -> is_valid(x, constraint), with_candidates)
 end
-

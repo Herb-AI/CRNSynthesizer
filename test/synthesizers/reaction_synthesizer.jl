@@ -29,3 +29,36 @@ end =#
     @test length(reactions) > 0
 
 end
+
+@testitem "Reaction Synthesizer (atom -> molecules -> reactions pipeline)" begin
+    using DataStructures
+
+    # Create some molecules
+    m1 = from_SMILES("[H]-[H]")
+    m2 = from_SMILES("[O]=[O]")
+    m3 = from_SMILES("[H]-[O]-[H]")
+
+    atom_valences = OrderedDict("[H]" => 1, "[O]" => 2)
+    problem = ProblemDefinition(
+        atom_valences,
+        [m1, m2, m3],
+        Molecule[],
+        ReactionNetwork(Reaction[])
+    )
+
+    molecule_settings = SynthesizerSettings(max_depth = 4, max_programs = 2)
+    reaction_settings = SynthesizerSettings(max_depth = 8)
+
+    reactions, molecules = synthesize_reactions(
+        problem,
+        molecule_settings,
+        reaction_settings;
+        initial_molecules_count = 3
+    )
+
+    @test length(molecules) >= 3
+    @test length(reactions) > 0
+end
+
+
+

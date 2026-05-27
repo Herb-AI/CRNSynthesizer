@@ -28,3 +28,12 @@
     #println("Number of unique fragment-based molecules synthesized: ",
       #length(fragment_molecules))
 end
+
+@testitem "SMILES Unique Digit Remapping" begin
+    # Test a more complex overlapping ring system to make sure they remain correct
+    input_smiles2 = "C1CC2CC1CC2"
+    explicit_smiles2 = CRNSynthesizer.make_smiles_custom_explicit(input_smiles2)
+    @test occursin("1", explicit_smiles2)
+    @test occursin("2", explicit_smiles2)
+end
+

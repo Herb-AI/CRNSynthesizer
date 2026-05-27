@@ -7,7 +7,8 @@ function make_smiles_custom_explicit(smiles::String)::String
 
     # Store preceding bond types of digits
     digit_bonds_by_index = Dict{Int, Char}()
-    digit_open = Dict{Char, Tuple{Int, Char}}()
+    digit_open = Dict{Char, Tuple{Int, Char, Char}}()
+    active_digits = Set{Int}()
     in_bracket = false
     for (i, c) in enumerate(smiles_chars)
         if c == '['
@@ -17,7 +18,7 @@ function make_smiles_custom_explicit(smiles::String)::String
         elseif isdigit(c) && !in_bracket
             bond = (i > 1 && is_bond(smiles_chars[i - 1])) ? smiles_chars[i - 1] : '-'
             if haskey(digit_open, c)
-                first_i, first_bond = digit_open[c]
+                first_i, first_bond, mapped_digit = digit_open[c]
                 resolved_bond = '-'
                 if bond != '-'
                     resolved_bond = bond
@@ -26,9 +27,24 @@ function make_smiles_custom_explicit(smiles::String)::String
                 end
                 digit_bonds_by_index[first_i] = resolved_bond
                 digit_bonds_by_index[i] = resolved_bond
+                smiles_chars[first_i] = mapped_digit
+                smiles_chars[i] = mapped_digit
+
+                # Release the mapped digit
+                mapped_digit_val = Int(mapped_digit) - Int('0')
+                delete!(active_digits, mapped_digit_val)
+
                 delete!(digit_open, c)
             else
-                digit_open[c] = (i, bond)
+                # Find the smallest free digit starting from 1
+                d = 1
+                while d in active_digits
+                    d += 1
+                end
+                push!(active_digits, d)
+
+                mapped_digit = Char('0' + d)
+                digit_open[c] = (i, bond, mapped_digit)
             end
         end
     end
@@ -65,8 +81,10 @@ function make_smiles_custom_explicit(smiles::String)::String
             i += 1
         end
 
-        if i <= length(smiles_chars) && isdigit(smiles_chars[i]) && last(result_smile) == ']'
-            result_smile *= string(get(digit_bonds_by_index, i, '-')) * string(smiles_chars[i])
+        if i <= length(smiles_chars) && isdigit(smiles_chars[i]) &&
+           last(result_smile) == ']'
+            result_smile *= string(get(digit_bonds_by_index, i, '-')) *
+                            string(smiles_chars[i])
             i += 1
         end
     end
@@ -83,7 +101,8 @@ function make_fragment_custom_explicit(smiles::String)::Tuple{Int, Expr, Expr}
     result_smile = replace(result_smile, r"^\[\d+\*\][-=≡]?" => "")
     result_smile = replace(
         result_smile, r"\([-=≡]?\[(\d+)\*\]\)" => s -> "\" * fragment_" *
-                                                       match(r"\d+", s).match * "_exit * \"")
+                                                       match(r"\d+", s).match *
+                                                       "_exit * \"")
     result_smile = replace(result_smile,
         r"[-=≡]?\[(\d+)\*\]" => s -> "\" * fragment_" * match(r"\d+", s).match *
                                      "_exit * \"")
@@ -101,8 +120,9 @@ function make_fragment_custom_explicit(smiles::String)::Tuple{Int, Expr, Expr}
 end
 
 function make_smiles_rdkit_explicit(smiles::String)::String
-    MoleculeFlow.mol_to_smiles(
-        MoleculeFlow.add_hs(MoleculeFlow.mol_from_smiles(smiles)); kekule_smiles = true, all_bonds_explicit = true)
+    mol = RDKitMinimalLib.get_mol(smiles)
+    RDKitMinimalLib.add_hs(mol)
+    return RDKitMinimalLib.get_smiles(mol, Dict{String, Any}("allBondsExplicit" => true))
 end
 
 function has_connection_points(frag_smiles::String)::Bool

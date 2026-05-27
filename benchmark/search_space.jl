@@ -422,7 +422,7 @@ include("data/estherification.jl")
 include("data/water.jl")
 include("data/ethylene.jl")
 
-PROBLEMS = [
+const PROBLEMS = [
     (
         name = "Water problem with O2 missing",
         problem = water_problem(;

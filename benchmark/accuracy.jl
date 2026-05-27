@@ -45,7 +45,7 @@ end
 
 max_time = 600
 
-PROBLEMS = [
+const PROBLEMS = [
     (
         name = "Water problem with O2 missing",
         problem = water_problem(;
