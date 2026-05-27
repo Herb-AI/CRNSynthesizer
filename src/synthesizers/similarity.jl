@@ -50,37 +50,53 @@ function get_similarity_metric(metric_name::Symbol)
     end
 end
 
-function sort_molecules_by_similarity(molecules::Vector{Molecule}, known_molecules::Vector{Molecule}; metric_name::Symbol = :simpson)
-    isempty(known_molecules) && return molecules
+function sort_molecules_by_similarity(
+        molecules::Vector{Molecule},
+        known_molecules::Vector{Molecule};
+        metric_name::Symbol = :simpson,
+        cache::Union{Nothing, Dict{Molecule, Float64}} = nothing
+)
+    (isempty(known_molecules) || metric_name == :none) && return molecules
 
     metric = get_similarity_metric(metric_name)
-    scores = zeros(Float64, length(molecules))
-    for (i, m) in enumerate(molecules)
-        max_score = 0.0
-        for km in known_molecules
-            score = metric(m, km)
-            max_score = max(max_score, score)
-        end
-        scores[i] = max_score
-    end
 
-    return molecules[sortperm(scores, rev=true)]
+    scores = map(
+        m -> get_molecule_similarity_score(m, known_molecules, metric, cache), molecules)
+
+    return molecules[sortperm(scores, rev = true)]
+end
+
+function get_molecule_similarity_score(
+        m::Molecule,
+        known_molecules::Vector{Molecule},
+        metric::Function,
+        molecule_cache::Union{Nothing, Dict{Molecule, Float64}}
+)
+    if !isnothing(molecule_cache) && haskey(molecule_cache, m)
+        return molecule_cache[m]
+    end
+    mol_max = maximum(
+        (metric(m, km) for km in known_molecules),
+        init = 0.0
+    )
+    if !isnothing(molecule_cache)
+        molecule_cache[m] = mol_max
+    end
+    return mol_max
 end
 
 function score_reaction_by_similarity(
-    reaction::Reaction,
-    known_molecules::Vector{Molecule};
-    metric::Function = tanimoto_similarity,
-    combine::Symbol = :multiplicative  # :multiplicative, :additive, :pooled, or :sum
+        reaction::Reaction,
+        known_molecules::Vector{Molecule};
+        metric::Function = tanimoto_similarity,
+        combine::Symbol = :multiplicative,  # :multiplicative, :additive, :pooled, or :sum
+        molecule_cache::Union{Nothing, Dict{Molecule, Float64}} = nothing
 )
     if combine == :pooled
         total_score = 0.0
         for (_, m) in Iterators.flatten((reaction.inputs, reaction.outputs))
-            mol_max = maximum(
-                (metric(m, km) for km in known_molecules),
-                init=0.0
-            )
-            total_score += mol_max
+            total_score += get_molecule_similarity_score(
+                m, known_molecules, metric, molecule_cache)
         end
         n_total = max(length(reaction.inputs) + length(reaction.outputs), 1)
         return total_score / n_total
@@ -88,20 +104,14 @@ function score_reaction_by_similarity(
 
     input_score = 0.0
     for (_, m) in reaction.inputs
-        mol_max = maximum(
-            (metric(m, km) for km in known_molecules),
-            init=0.0
-        )
-        input_score += mol_max
+        input_score += get_molecule_similarity_score(
+            m, known_molecules, metric, molecule_cache)
     end
 
     output_score = 0.0
     for (_, m) in reaction.outputs
-        mol_max = maximum(
-            (metric(m, km) for km in known_molecules),
-            init=0.0
-        )
-        output_score += mol_max
+        output_score += get_molecule_similarity_score(
+            m, known_molecules, metric, molecule_cache)
     end
 
     if combine == :multiplicative
@@ -118,14 +128,30 @@ function score_reaction_by_similarity(
     end
 end
 
-function sort_reactions_by_similarity(reactions::Vector{Reaction}, known_molecules::Vector{Molecule}; metric_name::Symbol = :simpson, combine::Symbol = :multiplicative)
-    isempty(known_molecules) && return reactions
+function sort_reactions_by_similarity(
+        reactions::Vector{Reaction},
+        known_molecules::Vector{Molecule};
+        metric_name::Symbol = :simpson,
+        combine::Symbol = :multiplicative,
+        cache::Union{Nothing, Dict{Reaction, Float64}} = nothing,
+        molecule_cache::Union{Nothing, Dict{Molecule, Float64}} = nothing
+)
+    (isempty(known_molecules) || metric_name == :none) && return reactions
 
     metric = get_similarity_metric(metric_name)
     scores = zeros(Float64, length(reactions))
     for (i, r) in enumerate(reactions)
-        scores[i] = score_reaction_by_similarity(r, known_molecules; metric=metric, combine=combine)
+        if !isnothing(cache) && haskey(cache, r)
+            scores[i] = cache[r]
+        else
+            score = score_reaction_by_similarity(r, known_molecules; metric = metric,
+                combine = combine, molecule_cache = molecule_cache)
+            scores[i] = score
+            if !isnothing(cache)
+                cache[r] = score
+            end
+        end
     end
 
-    return reactions[sortperm(scores, rev=true)]
+    return reactions[sortperm(scores, rev = true)]
 end

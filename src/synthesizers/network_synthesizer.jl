@@ -87,6 +87,7 @@ function synthesize_networks(
     molecule_iterator = get_iterator(molecule_settings, molecule_grammar, :molecule)
 
     networks = Vector{ReactionNetwork}()
+    molecule_score_cache = Dict{Molecule, Float64}()
 
     stop_condition = false
     for molecule_program in molecule_iterator
@@ -107,7 +108,7 @@ function synthesize_networks(
         end
 
         networks_grammar = network_grammar(
-            sort_molecules_by_similarity(collect(molecules), problem.known_molecules; metric_name=metric_name), problem; settings = network_settings
+            sort_molecules_by_similarity(collect(molecules), problem.known_molecules; metric_name=metric_name, cache=molecule_score_cache), problem; settings = network_settings
         )
         network_iterator = get_iterator(network_settings, networks_grammar, :network)
         for network_program in network_iterator
@@ -169,6 +170,8 @@ function synthesize_networks_2(
     reaction_iterator = get_iterator(reaction_settings, reactions_grammar, :reaction)
 
     networks = Vector{ReactionNetwork}()
+    reaction_score_cache = Dict{Reaction, Float64}()
+    molecule_score_cache = Dict{Molecule, Float64}()
 
     stop_condition = false
     for reaction_program in reaction_iterator
@@ -188,7 +191,7 @@ function synthesize_networks_2(
         end
 
         networks_grammar = network_grammar(
-            sort_reactions_by_similarity(collect(reactions), problem.known_molecules; metric_name=metric_name, combine=combine_method), problem; settings = network_settings
+            sort_reactions_by_similarity(collect(reactions), problem.known_molecules; metric_name=metric_name, combine=combine_method, cache=reaction_score_cache, molecule_cache=molecule_score_cache), problem; settings = network_settings
         )
         network_iterator = get_iterator(network_settings, networks_grammar, :network)
         for network_program in network_iterator
@@ -254,8 +257,10 @@ function synthesize_networks(
     molecule_iterator = get_iterator(molecule_settings, molecule_grammar, :molecule)
 
     reactions = OrderedSet{Reaction}()
-
     networks = Vector{ReactionNetwork}()
+
+    molecule_score_cache = Dict{Molecule, Float64}()
+    reaction_score_cache = Dict{Reaction, Float64}()
 
     stop_condition = false
     for molecule_program in molecule_iterator
@@ -268,7 +273,7 @@ function synthesize_networks(
         end
 
         reactions_grammar = reaction_grammar(
-            sort_molecules_by_similarity(collect(molecules), problem.known_molecules; metric_name=metric_name); settings = reaction_settings)
+            sort_molecules_by_similarity(collect(molecules), problem.known_molecules; metric_name=metric_name, cache=molecule_score_cache); settings = reaction_settings)
         reaction_iterator = get_iterator(reaction_settings, reactions_grammar, :reaction)
         for reaction_program in reaction_iterator
             reaction = interpret_reaction(reaction_program, reactions_grammar)
@@ -292,7 +297,7 @@ function synthesize_networks(
             # println("Found $(length(reactions)) reactions so far.")
 
             networks_grammar = network_grammar(
-                sort_reactions_by_similarity(collect(reactions), problem.known_molecules; metric_name=metric_name, combine=combine_method), problem; settings = network_settings
+                sort_reactions_by_similarity(collect(reactions), problem.known_molecules; metric_name=metric_name, combine=combine_method, cache=reaction_score_cache, molecule_cache=molecule_score_cache), problem; settings = network_settings
             )
             network_iterator = get_iterator(network_settings, networks_grammar, :network)
             for network_program in network_iterator

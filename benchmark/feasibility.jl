@@ -9,7 +9,7 @@ include("data/ethylene.jl")
 include("data/SYN_problems.jl")
 
 include("data/synrxn_loader.jl")
-using .SynRXNLoader
+import .SynRXNLoader
 
 function is_feasible_problem(problem::ProblemDefinition)::Tuple{Bool, String}
     # Decompose all known molecules into BRICS fragments
@@ -44,7 +44,7 @@ function is_feasible_problem(problem::ProblemDefinition)::Tuple{Bool, String}
         for frag_smiles in known_frags
             frag_m = MoleculeFlow.mol_from_smiles(frag_smiles)
             if !ismissing(frag_m)
-                if !isnothing(MoleculeFlow.has_substructure_match(goal_m, frag_m))
+                if MoleculeFlow.has_substructure_match(goal_m, frag_m)
                     shared_any = true
                     break
                 end
@@ -275,13 +275,13 @@ end
 # -------------------------------------------------------------
 # Automated SynRXN mos Benchmark
 # -------------------------------------------------------------
-function run_automated_mos_benchmark(; max_scan::Int = 200, max_synthesis_runs::Int = 5)
+function run_automated_mos_benchmark(; max_time::Int = 60, max_scan::Int = typemax(Int), max_synthesis_runs::Int = 5)
     println()
     println("=======================================================")
     println("Running Automated SynRXN mos Feasibility Benchmark")
     println("=======================================================")
     
-    df = load_synrxn_dataset("rbl", "mos")
+    df = SynRXNLoader.load_synrxn_dataset("rbl", "mos")
     total_records = nrow(df)
     scan_limit = min(total_records, max_scan)
     
@@ -301,9 +301,17 @@ function run_automated_mos_benchmark(; max_scan::Int = 200, max_synthesis_runs::
         gt_str = row.ground_truth
         
         reaction_str = rxn_str * "," * gt_str
-        
+        problem = nothing
         try
             problem = parse_syn_problem(reaction_str)
+        catch e
+            infeasible_count += 1
+            println("  \033[31m✗ Failed to parse reaction for record $r_id: ", e, "\033[0m")
+            reason = "Failed to parse reaction"
+            infeasible_reasons[reason] = get(infeasible_reasons, reason, 0) + 1
+            continue
+        end
+        try
             is_feas, reason = is_feasible_problem(problem)
             
             if is_feas
@@ -315,7 +323,8 @@ function run_automated_mos_benchmark(; max_scan::Int = 200, max_synthesis_runs::
             end
         catch e
             infeasible_count += 1
-            reason = "Failed to parse reaction"
+            println("  \033[31m✗ Failed to decide feasibility for record $r_id: ", e, "\033[0m")
+            reason = "Failed to decide feasibility"
             infeasible_reasons[reason] = get(infeasible_reasons, reason, 0) + 1
         end
     end
@@ -364,6 +373,6 @@ function run_automated_mos_benchmark(; max_scan::Int = 200, max_synthesis_runs::
     println("=======================================================")
 end
 
-run_hardcoded_benchmarks()
+#run_hardcoded_benchmarks()
 
-run_automated_mos_benchmark(; max_scan = 500, max_synthesis_runs = 3)
+run_automated_mos_benchmark(; max_scan = 8, max_synthesis_runs = 3)

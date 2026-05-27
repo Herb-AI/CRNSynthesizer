@@ -29,7 +29,7 @@ function synthesize_reactions(
         known_molecules::Vector{Molecule} = Molecule[]
 )::Vector{Reaction}
     metric_name = get(settings.options, :similarity_metric, :none)
-    sorted_molecules = isempty(known_molecules) ? molecules :
+    sorted_molecules = (isempty(known_molecules) || metric_name == :none) ? molecules :
                        sort_molecules_by_similarity(molecules, known_molecules; metric_name=metric_name)
     grammar = reaction_grammar(sorted_molecules; settings = settings)
     iterator = get_iterator(settings, grammar, :reaction)

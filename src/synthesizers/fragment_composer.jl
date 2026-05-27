@@ -3,19 +3,19 @@ function is_bond(character::Char)::Bool
 end
 
 function make_smiles_custom_explicit(smiles::String)::String
-    smiles = replace(smiles, '#' => '≡')
+    smiles_chars = collect(replace(smiles, '#' => '≡'))
 
     # Store preceding bond types of digits
     digit_bonds_by_index = Dict{Int, Char}()
     digit_open = Dict{Char, Tuple{Int, Char}}()
     in_bracket = false
-    for (i, c) in enumerate(smiles)
+    for (i, c) in enumerate(smiles_chars)
         if c == '['
             in_bracket = true
         elseif c == ']'
             in_bracket = false
         elseif isdigit(c) && !in_bracket
-            bond = (i > 1 && is_bond(smiles[i - 1])) ? smiles[i - 1] : '-'
+            bond = (i > 1 && is_bond(smiles_chars[i - 1])) ? smiles_chars[i - 1] : '-'
             if haskey(digit_open, c)
                 first_i, first_bond = digit_open[c]
                 resolved_bond = '-'
@@ -37,36 +37,36 @@ function make_smiles_custom_explicit(smiles::String)::String
     result_smile = ""
     in_bracket = false
     i = 1
-    while i <= length(smiles)
-        c = smiles[i]
+    while i <= length(smiles_chars)
+        c = smiles_chars[i]
         if c == '['
             in_bracket = true
-            result_smile *= c
+            result_smile *= string(c)
             i += 1
             continue
         elseif c == ']'
             in_bracket = false
-            result_smile *= c
+            result_smile *= string(c)
             i += 1
             continue
         end
 
         if !in_bracket && isletter(c)
             # Check for two-letter atoms like Cl, Br
-            if i < length(smiles) && isletter(smiles[i + 1])
-                result_smile *= "[" * smiles[i:(i + 1)] * "]"
+            if i < length(smiles_chars) && isletter(smiles_chars[i + 1])
+                result_smile *= "[" * string(smiles_chars[i], smiles_chars[i + 1]) * "]"
                 i += 2
             else
-                result_smile *= "[" * c * "]"
+                result_smile *= "[" * string(c) * "]"
                 i += 1
             end
         else
-            result_smile *= c
+            result_smile *= string(c)
             i += 1
         end
 
-        if i <= length(smiles) && isdigit(smiles[i]) && last(result_smile) == ']'
-            result_smile *= get(digit_bonds_by_index, i, '-') * smiles[i]
+        if i <= length(smiles_chars) && isdigit(smiles_chars[i]) && last(result_smile) == ']'
+            result_smile *= string(get(digit_bonds_by_index, i, '-')) * string(smiles_chars[i])
             i += 1
         end
     end
