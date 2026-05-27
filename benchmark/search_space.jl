@@ -1,4 +1,5 @@
 using CRNSynthesizer, DataStructures
+include("data/methane.jl")
 
 # Problem Definition
 atom_valences = OrderedDict("[H]" => 1, "[O]" => 2, "[C]" => 4)

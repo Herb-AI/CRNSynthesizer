@@ -32,7 +32,7 @@ function tanimoto_similarity(m1::Molecule, m2::Molecule)
     return iszero(union_count) ? 0.0 : intersection / union_count
 end
 
-function tango_similarity(m1::Molecule, m2::Molecule)
+function combined_similarity(m1::Molecule, m2::Molecule)
     tan = tanimoto_similarity(m1, m2)
     simp = simpson_similarity(m1, m2)
     return 0.5 * tan + 0.5 * simp
@@ -41,8 +41,8 @@ end
 function get_similarity_metric(metric_name::Symbol)
     if metric_name == :tanimoto
         return tanimoto_similarity
-    elseif metric_name == :tango
-        return tango_similarity
+    elseif metric_name == :both
+        return combined_similarity
     elseif metric_name == :simpson
         return simpson_similarity
     else

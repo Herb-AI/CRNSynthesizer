@@ -82,6 +82,6 @@ function parse_syn_problem(reaction_str::String)::ProblemDefinition
 end
 
 function syn_problem()
-    DEFAULT_SYN_STR = "CC1(C)OB(c2cn[nH]c2)OC1(C)C.O=[N+]([O-])c1ccc2c(c1)c(Br)nn2C(c1ccccc1)(c1ccccc1)c1ccccc1>>O=[N+]([O-])c1ccc2c(c1)c(-c1cn[nH]c1)nn2C(c1ccccc1)(c1ccccc1)c1ccccc1,CC1(C)OB(c2cn[nH]c2)OC1(C)C.O=[N+]([O-])c1ccc2c(c1)c(Br)nn2C(c1ccccc1)(c1ccccc1)c1ccccc1>>O=[N+]([O-])c1ccc2c(c1)c(-c1cn[nH]c1)nn2C(c1ccccc1)(c1ccccc1)c1ccccc1.CC1(C)OB(Br)OC1(C)C"
+    DEFAULT_SYN_STR = "CC(C)(C)OC(=O)CONC(=O)NCc1cccc2ccccc12>>O=C(O)CONC(=O)NCc1cccc2ccccc12,CC(C)(C)OC(=O)CONC(=O)NCc1cccc2ccccc12.O>>O=C(O)CONC(=O)NCc1cccc2ccccc12.CC(C)(C)O"
     return parse_syn_problem(DEFAULT_SYN_STR)
 end
