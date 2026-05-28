@@ -272,8 +272,15 @@ function synthesize_networks(
             continue
         end
 
+        pool_molecules = sort_molecules_by_similarity(collect(molecules), problem.known_molecules; metric_name=metric_name, cache=molecule_score_cache)
+        if !isnothing(problem.partial_reaction)
+            partial_mols = get_reaction_molecules(problem.partial_reaction)
+            pool_molecules = filter(m -> !(m in partial_mols), pool_molecules)
+        end
+
         reactions_grammar = reaction_grammar(
-            sort_molecules_by_similarity(collect(molecules), problem.known_molecules; metric_name=metric_name, cache=molecule_score_cache); settings = reaction_settings)
+            pool_molecules; settings = reaction_settings, partial_reaction = problem.partial_reaction
+        )
         reaction_iterator = get_iterator(reaction_settings, reactions_grammar, :reaction)
         for reaction_program in reaction_iterator
             reaction = interpret_reaction(reaction_program, reactions_grammar)

@@ -8,15 +8,6 @@ include("data/estherification.jl")
 include("data/water.jl")
 include("data/methane.jl")
 include("data/ethylene.jl")
-function fix_single_atom_molecule(smiles::AbstractString)::String
-    if smiles == "[H]"
-        return "[H]-[H]"
-    end
-    if smiles == "[O]"
-        return "[O]=[O]"
-    end
-    return String(smiles)
-end
 
 include("data/synrxn_loader.jl")
 import .SynRXNLoader
@@ -83,7 +74,11 @@ end
 
 function parse_rxn_cached(rxn_str::SubString{String})::Tuple{
         Vector{Molecule}, Vector{Molecule}}
-    rxn_parts = split(rxn_str, ">>")
+    # Pre-process to convert free hydrogen/oxygen representations to stable molecules
+    processed_rxn = replace(rxn_str, "[H].[H]" => "[H]-[H]")
+    processed_rxn = replace(processed_rxn, "[O].[O]" => "[O]=[O]")
+
+    rxn_parts = split(processed_rxn, ">>")
     if length(rxn_parts) != 2
         error("Invalid reaction string: $rxn_str")
     end
@@ -92,9 +87,6 @@ function parse_rxn_cached(rxn_str::SubString{String})::Tuple{
 
     reactants_smiles = filter(!isempty, map(strip, split(reactants_part, ".")))
     products_smiles = filter(!isempty, map(strip, split(products_part, ".")))
-
-    map!(fix_single_atom_molecule, reactants_smiles)
-    map!(fix_single_atom_molecule, products_smiles)
 
     reactants = [get_parsed_molecule_cached(String(s)) for s in reactants_smiles]
     products = [get_parsed_molecule_cached(String(s)) for s in products_smiles]
@@ -156,11 +148,30 @@ function parse_syn_problem(reaction_str::AbstractString)::ProblemDefinition
 
     atom_valences = get_valences_from_molecules(all_molecules)
 
+    inc_reactant_counts = Dict{Molecule, Int}()
+    for m in incomplete_reactants
+        inc_reactant_counts[m] = get(inc_reactant_counts, m, 0) + 1
+    end
+    partial_inputs = [(inc_reactant_counts[m], m) for m in unique(incomplete_reactants)]
+
+    inc_product_counts = Dict{Molecule, Int}()
+    for m in incomplete_products
+        inc_product_counts[m] = get(inc_product_counts, m, 0) + 1
+    end
+    partial_outputs = [(inc_product_counts[m], m) for m in unique(incomplete_products)]
+
+    partial_reaction = if isempty(partial_inputs) && isempty(partial_outputs)
+        nothing
+    else
+        CRNSynthesizer.Reaction(nothing, partial_inputs, partial_outputs, false)
+    end
+
     return ProblemDefinition(
         atom_valences,
         known_molecules,
         goal_molecules,
-        goal_network
+        goal_network;
+        partial_reaction = partial_reaction
     )
 end
 
@@ -582,7 +593,7 @@ function run_automated_rbl_benchmark(;
     if synthesis_eval_limit > 0
         println("\nEvaluating synthesis (stages molecules -> reactions only) on the first $synthesis_eval_limit feasible problems...")
 
-        for metric in [:simpson, :tanimoto, :both]
+        for metric in [:none] #,:simpson, :tanimoto, :both]
             println("\n  \033[1mSimilarity Metric: $metric\033[0m")
             successful_runs = 0
             total_time = 0.0
@@ -619,4 +630,4 @@ end
 
 #run_hardcoded_benchmarks()
 
-run_automated_rbl_benchmark(; dataset = "mbs", max_scan = 50, max_synthesis_runs = 5)
+run_automated_rbl_benchmark(; dataset = "mbs", max_scan = typemax(Int), max_synthesis_runs = typemax(Int))

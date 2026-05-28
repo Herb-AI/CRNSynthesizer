@@ -135,11 +135,57 @@ function get_molecule_paths(solver::Solver, path::Vector{Int})
     return result
 end
 
+function get_prefilled_atoms(solver::Solver, path::Vector{Int})
+    node = get_node_at_location(solver, path)
+    if node isa Hole
+        return Dict{String, Int}(), Dict{String, Int}()
+    end
+    rule = HerbCore.get_rule(node)
+    rule_expr = solver.grammar.rules[rule]
+    
+    @match rule_expr begin
+        :(Reaction(vcat(molecule_list, input_molecules), vcat(molecule_list, output_molecules))) => begin
+            # Safety check: ensure children are fully instantiated before extracting prefilled atoms
+            if !isfilled(node.children[2]) || !isfilled(node.children[4])
+                return Dict{String, Int}(), Dict{String, Int}()
+            end
+
+            input_rule = HerbCore.get_rule(node.children[2])
+            inputs_vec = solver.grammar.rules[input_rule]
+            
+            output_rule = HerbCore.get_rule(node.children[4])
+            outputs_vec = solver.grammar.rules[output_rule]
+            
+            left_atoms = Dict{String, Int}()
+            for mol in inputs_vec
+                left_atoms = mergewith(+, left_atoms, count_atoms(mol))
+            end
+            
+            right_atoms = Dict{String, Int}()
+            for mol in outputs_vec
+                right_atoms = mergewith(+, right_atoms, count_atoms(mol))
+            end
+            
+            return left_atoms, right_atoms
+        end
+        _ => return Dict{String, Int}(), Dict{String, Int}()
+    end
+end
+
 function post_reaction_constraints!(solver::Solver, reaction_paths::Vector{Vector{Int}})
     reaction_constraints = []
     for (i, path) in enumerate(reaction_paths)
+        node = get_node_at_location(solver, path)
+        rule = HerbCore.get_rule(node)
+        rule_expr = solver.grammar.rules[rule]
+        
+        is_partial = @match rule_expr begin
+            :(Reaction(vcat(molecule_list, input_molecules), vcat(molecule_list, output_molecules))) => true
+            _ => false
+        end
+                     
         input_paths = get_molecule_paths(solver, push!(copy(path), 1))
-        output_paths = get_molecule_paths(solver, push!(copy(path), 2))
+        output_paths = get_molecule_paths(solver, push!(copy(path), is_partial ? 3 : 2))
 
         rule_to_atoms = Dict{Int, Dict{Any, Any}}()
         molecule_rules = findall(solver.grammar.domains[:molecule])
@@ -148,9 +194,14 @@ function post_reaction_constraints!(solver::Solver, reaction_paths::Vector{Vecto
             rule_to_atoms[rule] = count_atoms(solver.grammar.rules[rule])
         end
 
-        possible_left = get_possibilities(solver, input_paths; rule_counts = rule_to_atoms)
+        prefilled_left, prefilled_right = get_prefilled_atoms(solver, path)
+
+        possible_left = get_possibilities(
+            solver, input_paths; rule_counts = rule_to_atoms, prefilled_atoms = prefilled_left
+        )
         possible_right = get_possibilities(
-            solver, output_paths; rule_counts = rule_to_atoms)
+            solver, output_paths; rule_counts = rule_to_atoms, prefilled_atoms = prefilled_right
+        )
 
         left_length = length(possible_left)
         right_length = length(possible_right)
@@ -203,8 +254,16 @@ function HerbConstraints.on_new_node(
         end
     else
         if solver isa UniformSolver && type == :reaction
+            node = get_node_at_location(solver, path)
+            rule = HerbCore.get_rule(node)
+            rule_expr = solver.grammar.rules[rule]
+            is_partial = @match rule_expr begin
+                :(Reaction(vcat(molecule_list, input_molecules), vcat(molecule_list, output_molecules))) => true
+                _ => false
+            end
+
             input_paths = get_molecule_paths(solver, push!(copy(path), 1))
-            output_paths = get_molecule_paths(solver, push!(copy(path), 2))
+            output_paths = get_molecule_paths(solver, push!(copy(path), is_partial ? 3 : 2))
 
             rule_to_atoms = Dict{Int, Dict{Any, Any}}()
             molecule_rules = findall(solver.grammar.domains[:molecule])
@@ -213,11 +272,13 @@ function HerbConstraints.on_new_node(
                 rule_to_atoms[rule] = count_atoms(solver.grammar.rules[rule])
             end
 
+            prefilled_left, prefilled_right = get_prefilled_atoms(solver, path)
+
             possible_left = get_possibilities(
-                solver, input_paths; rule_counts = rule_to_atoms
+                solver, input_paths; rule_counts = rule_to_atoms, prefilled_atoms = prefilled_left
             )
             possible_right = get_possibilities(
-                solver, output_paths; rule_counts = rule_to_atoms
+                solver, output_paths; rule_counts = rule_to_atoms, prefilled_atoms = prefilled_right
             )
 
             left_length = length(possible_left)
@@ -283,7 +344,8 @@ end
 function get_possibilities(
         solver::Solver,
         paths::Vector{Vector{Int}};
-        rule_counts::Dict{Int, Dict{Any, Any}} = Dict{Int, Dict{Any, Any}}()
+        rule_counts::Dict{Int, Dict{Any, Any}} = Dict{Int, Dict{Any, Any}}(),
+        prefilled_atoms::Dict{String, Int} = Dict{String, Int}()
 )
 
     # Build atom indices dynamically based on the elements and charges present in the grammar
@@ -297,13 +359,18 @@ function get_possibilities(
             union!(all_keys, keys(count_atoms(solver.grammar.rules[rule])))
         end
     end
+    union!(all_keys, keys(prefilled_atoms))
     
     sorted_atoms = sort(collect(all_keys))
     atom_indices = Dict{String, Int}(atom => i for (i, atom) in enumerate(sorted_atoms))
     n_atoms = max(length(sorted_atoms), 1)
 
-    # Initialize with a single empty option of the correct size
-    current_options = [(zeros(Int, n_atoms), Int[])]
+    # Initialize with prefilled atom counts
+    initial_counts = zeros(Int, n_atoms)
+    for (atom, count) in prefilled_atoms
+        initial_counts[atom_indices[atom]] = count
+    end
+    current_options = [(initial_counts, Int[])]
 
     # Process each path
     for path in paths

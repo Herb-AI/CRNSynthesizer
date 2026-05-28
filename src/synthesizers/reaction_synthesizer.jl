@@ -24,14 +24,34 @@ function synthesize_reactions(
     return candidates
 end
 
+function get_reaction_molecules(reaction::Reaction)::Vector{Molecule}
+    mols = Molecule[]
+    for (count, mol) in reaction.inputs
+        push!(mols, mol)
+    end
+    for (count, mol) in reaction.outputs
+        push!(mols, mol)
+    end
+    return unique(mols)
+end
+
 function synthesize_reactions(
         molecules::Vector{Molecule}, settings::SynthesizerSettings;
-        known_molecules::Vector{Molecule} = Molecule[]
+        known_molecules::Vector{Molecule} = Molecule[],
+        partial_reaction::Union{Nothing, Reaction} = nothing
 )::Vector{Reaction}
     metric_name = get(settings.options, :similarity_metric, :none)
-    sorted_molecules = (isempty(known_molecules) || metric_name == :none) ? molecules :
-                       sort_molecules_by_similarity(molecules, known_molecules; metric_name=metric_name)
-    grammar = reaction_grammar(sorted_molecules; settings = settings)
+    
+    # If a partial reaction is provided, do not add its known molecules to the set of possible molecules
+    pool_molecules = molecules
+    if !isnothing(partial_reaction)
+        partial_mols = get_reaction_molecules(partial_reaction)
+        pool_molecules = filter(m -> !(m in partial_mols), pool_molecules)
+    end
+
+    sorted_molecules = (isempty(known_molecules) || metric_name == :none) ? pool_molecules :
+                       sort_molecules_by_similarity(pool_molecules, known_molecules; metric_name=metric_name)
+    grammar = reaction_grammar(sorted_molecules; settings = settings, partial_reaction = partial_reaction)
     iterator = get_iterator(settings, grammar, :reaction)
 
     candidates = Vector{Reaction}()
@@ -92,8 +112,14 @@ function synthesize_reactions(
             continue
         end
 
+        pool_molecules = sort_molecules_by_similarity(collect(molecules), problem.known_molecules; metric_name=metric_name, cache=molecule_score_cache)
+        if !isnothing(problem.partial_reaction)
+            partial_mols = get_reaction_molecules(problem.partial_reaction)
+            pool_molecules = filter(m -> !(m in partial_mols), pool_molecules)
+        end
+
         reactions_grammar = reaction_grammar(
-            sort_molecules_by_similarity(collect(molecules), problem.known_molecules; metric_name=metric_name, cache=molecule_score_cache); settings = reaction_settings
+            pool_molecules; settings = reaction_settings, partial_reaction = problem.partial_reaction
         )
         reaction_iterator = get_iterator(reaction_settings, reactions_grammar, :reaction)
         for reaction_program in reaction_iterator

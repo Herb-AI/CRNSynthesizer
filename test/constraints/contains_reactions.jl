@@ -28,10 +28,10 @@
     )
 
     # Create a network grammar without the ContainsReactions constraint
-    without_constraint_grammar = network_grammar([r1, r2, r3], problem, settings = settings)
+    without_constraint_grammar = network_grammar([r1, r2, r3], problem; settings = settings)
 
     # Create a network grammar with the ContainsReactions constraint
-    with_constraint_grammar = network_grammar([r1, r2, r3], problem, settings = settings)
+    with_constraint_grammar = network_grammar([r1, r2, r3], problem; settings = settings)
     constraint = ContainsReactions(
         with_constraint_grammar,
         [RequiredMolecule(m1, INPUT), RequiredMolecule(m2, OUTPUT)],

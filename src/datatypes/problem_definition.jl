@@ -17,6 +17,7 @@ struct ProblemDefinition
     expected_profiles::Dict{Molecule, Vector{Float64}}
     time_data::Vector{Float64}
     required_molecules::Vector{RequiredMolecule}
+    partial_reaction::Union{Nothing, Reaction}
 
     function ProblemDefinition(
             atom_valences::OrderedDict{String, Int},
@@ -26,7 +27,8 @@ struct ProblemDefinition
             expected_profiles::Dict{Molecule, Vector{Float64}} = Dict{
                 Molecule, Vector{Float64}}(),
             time_data::Vector{Float64} = Float64[],
-            required_molecules::Vector{RequiredMolecule} = RequiredMolecule[]
+            required_molecules::Vector{RequiredMolecule} = RequiredMolecule[],
+            partial_reaction::Union{Nothing, Reaction} = nothing
     )
         if isempty(required_molecules)
             required_molecules = preprocess_problem(known_molecules, expected_profiles)
@@ -38,7 +40,8 @@ struct ProblemDefinition
             goal_network,
             expected_profiles,
             time_data,
-            required_molecules
+            required_molecules,
+            partial_reaction
         )
     end
 end
