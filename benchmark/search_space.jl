@@ -353,7 +353,9 @@ elapsed_time = @elapsed begin
         max_depth = max_depth,
         options = Dict{Symbol, Any}(:unique_candidates => true)
     )
-    networks = synthesize_networks(reactions, settings, methane_problem(;
+    networks = synthesize_networks(reactions,
+        settings,
+        methane_problem(;
             selected_known_indices = [1, 3], selected_expected_indices = [1, 3]
         ))
 end
@@ -472,7 +474,7 @@ for (name, problem) in PROBLEMS
 
     for use_fragments in [false, true]
         println("\n  \033[1mUse Fragments: $use_fragments\033[0m")
-        
+
         fr = use_fragments ? fragment_rules : Dict{Int, Set{Expr}}()
         sf = use_fragments ? starting_fragments : Expr[]
 
@@ -481,7 +483,7 @@ for (name, problem) in PROBLEMS
             max_depth = 6, options = Dict{Symbol, Any}(:unique_candidates => true)
         )
         elapsed_time_m = @elapsed mols = synthesize_molecules(
-            problem.atom_valences; settings = molecule_settings, fragment_rules=fr, starting_fragments=sf
+            problem.atom_valences; settings = molecule_settings, fragment_rules = fr, starting_fragments = sf
         )
         println("  [Atoms → Molecules] Exhaustively found $(length(mols)) valid molecules in $(elapsed_time_m) seconds.")
 

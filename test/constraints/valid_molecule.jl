@@ -50,7 +50,9 @@ end
     atom_valences = OrderedDict("[H]" => 1, "[C]" => 4)
 
     # Define starting fragment expression with matching trailing ringbonds
-    starting_fragments = [:(starting_fragment = "[C]-1" * fragment_16_exit * "=[C](-[H])-[C](-[H])=[C](-[H])-[C](-[H])=[C]-1" * fragment_16_exit)]
+    starting_fragments = [:(starting_fragment = "[C]-1" * fragment_16_exit *
+                                                "=[C](-[H])-[C](-[H])=[C](-[H])-[C](-[H])=[C]-1" *
+                                                fragment_16_exit)]
 
     # Settings for the synthesizer
     settings = SynthesizerSettings(
@@ -73,10 +75,9 @@ end
 
     # Ensure that candidates are successfully found
     @test length(candidates) > 0
-    
+
     # Ensure all synthesized candidates are valid Molecules
     for cand in candidates
         @test !isempty(cand.canonical_smiles)
     end
 end
-

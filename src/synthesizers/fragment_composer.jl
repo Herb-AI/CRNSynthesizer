@@ -100,12 +100,14 @@ function make_fragment_custom_explicit(smiles::String)::Tuple{Int, Expr, Expr}
 
     result_smile = replace(result_smile, r"^\[\d+\*\][-=≡]?" => "")
     result_smile = replace(
-        result_smile, r"\([-=≡]?\[(\d+)\*\]\)" => s -> "\" * fragment_" *
-                                                       match(r"\d+", s).match *
-                                                       "_exit * \"")
+        result_smile, r"\([-=≡]?\[(\d+)\*\]\)" =>
+            s -> "\" * fragment_" *
+                 match(r"\d+", s).match *
+                 "_exit * \"")
     result_smile = replace(result_smile,
-        r"[-=≡]?\[(\d+)\*\]" => s -> "\" * fragment_" * match(r"\d+", s).match *
-                                     "_exit * \"")
+        r"[-=≡]?\[(\d+)\*\]" =>
+            s -> "\" * fragment_" * match(r"\d+", s).match *
+                 "_exit * \"")
 
     entry_rule = "fragment_" * entry_digit * "_entry = \"" * result_smile * "\""
     entry_rule = replace(entry_rule, " * \"\"" => "")

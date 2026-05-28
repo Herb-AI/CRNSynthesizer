@@ -53,15 +53,16 @@ end
 
     # Test count_atoms charge integration
     counts_na = count_atoms(m_na)
-    @test counts_na["[Na+]"] == 1
+    @test counts_na["Na"] == 1
+    @test counts_na["charge"] == 1
 
     counts_cl = count_atoms(m_cl)
-    @test counts_cl["[Cl-]"] == 1
-    @test !haskey(counts_cl, "charge")
+    @test counts_cl["Cl"] == 1
+    @test counts_cl["charge"] == -1
 
     counts_nacl = count_atoms(m_nacl)
-    @test counts_nacl["[Na]"] == 1
-    @test counts_nacl["[Cl]"] == 1
+    @test counts_nacl["Na"] == 1
+    @test counts_nacl["Cl"] == 1
     @test !haskey(counts_nacl, "charge")
 
     # Test dynamic valence extraction
@@ -85,13 +86,13 @@ end
     # Test reaction balancing
     constraint = BalancedReaction()
 
-    # Na+ + Cl- -> NaCl (Unbalanced because Na+ vs Na and Cl- vs Cl are different atom types under new semantics)
-    r_unbalanced_nacl = Reaction(
+    # Na+ + Cl- -> NaCl (Balanced because element types and total charge are conserved)
+    r_balanced_nacl = Reaction(
         nothing,
         [(1, m_na), (1, m_cl)],
         [(1, m_nacl)]
     )
-    @test !is_valid(r_unbalanced_nacl, constraint)
+    @test is_valid(r_balanced_nacl, constraint)
 
     # Na+ + Cl- -> Na+ + Cl- (Balanced)
     r_balanced = Reaction(
@@ -124,7 +125,7 @@ end
 
     without_constraint_grammar = reaction_grammar([m1, m2, m3], settings = settings)
     with_constraint_grammar = reaction_grammar([m1, m2, m3], settings = settings)
-    
+
     constraint = BalancedReaction(complete_grammar = false)
     addconstraint!(with_constraint_grammar, constraint)
 

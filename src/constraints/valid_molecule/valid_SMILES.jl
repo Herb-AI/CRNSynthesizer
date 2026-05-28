@@ -1,7 +1,8 @@
 # TODO: check the place of this definition
 # Define chemical properties
 digits = Dict(
-    "1" => 1, "2" => 2, "3" => 3, "4" => 4, "5" => 5, "6" => 6, "7" => 7, "8" => 8, "9" => 9
+    "1" => 1, "2" => 2, "3" => 3, "4" => 4, "5" => 5, "6" => 6, "7" => 7, "8" => 8, "9" =>
+        9
 )
 
 struct ValidSMILES <: AbstractGrammarConstraint
@@ -9,7 +10,8 @@ struct ValidSMILES <: AbstractGrammarConstraint
     atom_valences::Dict{String, Int}
 end
 
-function ValidSMILES(grammar::ContextSensitiveGrammar, atom_valences::OrderedDict{String, Int})
+function ValidSMILES(grammar::ContextSensitiveGrammar, atom_valences::OrderedDict{
+        String, Int})
     atom_dict, bond_dict = generate_atom_bond_dicts(grammar, atom_valences)
     digit_to_grammar, bond_to_grammar = generate_digit_bond_to_grammar(grammar)
     grammar_data = GrammarData(atom_dict, bond_dict, digit_to_grammar, bond_to_grammar)
@@ -64,7 +66,8 @@ function HerbConstraints.on_new_node(
 end
 
 function is_valid(candidate::Molecule, constraints::ValidSMILES)
-    bond_orders = Dict(single => 1.0, aromatic => 1.5, double => 2.0, triple => 3.0, quadruple => 4.0)
+    bond_orders = Dict(
+        single => 1.0, aromatic => 1.5, double => 2.0, triple => 3.0, quadruple => 4.0)
 
     atoms = candidate.atoms
     bonds = candidate.bonds
@@ -77,9 +80,14 @@ function is_valid(candidate::Molecule, constraints::ValidSMILES)
         valence = constraints.atom_valences[atom_str]
         connected_bonds = filter(b -> b.from == atom_index || b.to == atom_index, bonds)
         if isempty(connected_bonds)
-            return false
+            if valence == 0
+                continue
+            else
+                return false
+            end
         end
-        total_bond_order = round(Int, sum(bond_orders[b.bond_type] for b in connected_bonds))
+        total_bond_order = round(Int, sum(bond_orders[b.bond_type]
+        for b in connected_bonds))
         if total_bond_order != valence
             return false
         end

@@ -66,7 +66,7 @@ function get_relevant_bonds(solver::GenericSolver, path::Vector{Int})
             rule = HerbCore.get_rule(node)
             @match solver.grammar.rules[rule] begin
                 :(ringbond *
-                ringbonds) => begin
+                  ringbonds) => begin
                     ringbond_bonds,
                     ringbond_holes = get_relevant_bonds(
                         solver, push!(copy(path), 1)
@@ -94,7 +94,7 @@ function get_relevant_bonds(solver::GenericSolver, path::Vector{Int})
             rule = HerbCore.get_rule(node)
             @match solver.grammar.rules[rule] begin
                 :(branch *
-                branches) => begin
+                  branches) => begin
                     branch_bonds,
                     branch_holes = get_relevant_bonds(
                         solver, push!(copy(path), 1)
@@ -159,7 +159,7 @@ function propagate_atoms!(
 
             # Chain option with two children
             :(atom *
-            ringbonds) => begin
+              ringbonds) => begin
                 ring_bonds, ring_holes = get_relevant_bonds(solver, push!(copy(path), 2))
                 bonds::Vector{Vector{Int}} = vcat(ring_bonds, bond_paths)
                 propagate_atom!(solver, constraint, push!(copy(path), 1), bonds, holes)
@@ -167,8 +167,8 @@ function propagate_atoms!(
 
             # Chain option with three children
             :(SMILES_combine_chain(bond,
-            structure,
-            chain)) => begin
+                structure,
+                chain)) => begin
                 # The structule will have the bond and previous collected bond_paths and holes
                 bond_paths = push!(copy(bond_paths), push!(copy(path), 1))
                 propagate_atoms!(
@@ -190,7 +190,7 @@ function propagate_atoms!(
 
             # Chain option with three children
             :(structure * bond *
-            chain) => begin
+              chain) => begin
                 # The structure will have the bond and previous collected bond_paths and holes
                 bond_paths = push!(copy(bond_paths), push!(copy(path), 2))
                 propagate_atoms!(
@@ -221,7 +221,7 @@ function propagate_atoms!(
 
             # Structure option with three children
             :(atom * ringbonds *
-            branches) => begin
+              branches) => begin
                 # TODO: Check if the following propagate_atoms! is correct
                 # propagate_atoms!(solver, constraint, push!(copy(path), 3), bond_paths=bond_paths, holes=holes)
 
@@ -277,7 +277,7 @@ function propagate_atom!(
         return nothing
     end
 
-    if length_bonds + length_holes == 0
+    if min_connections > 0 && length_bonds + length_holes == 0
         HerbConstraints.set_infeasible!(solver)
         # println("infeasible")
         return nothing

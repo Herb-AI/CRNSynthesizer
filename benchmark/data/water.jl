@@ -45,9 +45,8 @@ function water_problem(; selected_known_indices = 1:3, selected_expected_indices
     reaction = CRNSynthesizer.Reaction(
         nothing, [(2, all_molecules[1]), (1, all_molecules[2])], [(2, all_molecules[3])]
     )
-    
 
-    goal_network =  CRNSynthesizer.ReactionNetwork([reaction])
+    goal_network = CRNSynthesizer.ReactionNetwork([reaction])
 
     # Build expected profiles dictionary
     expected_profiles = Dict{Molecule, Vector{Float64}}()

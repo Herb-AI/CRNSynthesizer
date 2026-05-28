@@ -72,7 +72,6 @@ function network_grammar(
         push!(req_molecules, (required_molecule.molecule, required_molecule.position))
     end
 
-
     for molecule in required_molecules
         add_rule!(grammar, :(required_molecule = $molecule))
         rule = findfirst(==(:($molecule)), grammar.rules)

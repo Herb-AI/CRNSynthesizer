@@ -45,7 +45,8 @@ function SynthesizerSettings(;
 end
 
 function get_iterator(
-        settings::SynthesizerSettings, grammar::ContextSensitiveGrammar, starting_element::Union{
+        settings::SynthesizerSettings, grammar::ContextSensitiveGrammar,
+        starting_element::Union{
             Symbol, AbstractRuleNode}
 )
     @match settings.iterator begin

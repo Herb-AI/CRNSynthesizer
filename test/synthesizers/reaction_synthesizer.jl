@@ -27,7 +27,6 @@ end =#
     settings = SynthesizerSettings(max_depth = 8)
     reactions = synthesize_reactions([m1, m2, m3], settings)
     @test length(reactions) > 0
-
 end
 
 @testitem "Reaction Synthesizer (atom -> molecules -> reactions pipeline)" begin
@@ -49,7 +48,8 @@ end
     molecule_settings = SynthesizerSettings(max_depth = 4, max_programs = 2)
     reaction_settings = SynthesizerSettings(max_depth = 8)
 
-    reactions, molecules = synthesize_reactions(
+    reactions,
+    molecules = synthesize_reactions(
         problem,
         molecule_settings,
         reaction_settings;
@@ -117,7 +117,8 @@ end
         if constraint isa HerbConstraints.Forbidden
             node = constraint.tree
             return HerbCore.get_rule(node) == partial_idx && length(node.children) == 4 &&
-                   node.children[3] isa HerbCore.RuleNode && HerbCore.get_rule(node.children[3]) == empty_list_idx
+                   node.children[3] isa HerbCore.RuleNode &&
+                   HerbCore.get_rule(node.children[3]) == empty_list_idx
         end
         return false
     end

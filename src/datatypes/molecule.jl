@@ -120,9 +120,33 @@ end
 
 function count_atoms(molecule::Molecule)::Dict{String, Int}
     atoms = Dict{String, Int}()
+    net_charge = 0
     for atom in molecule.atoms
-        atoms[atom.name] = get(atoms, atom.name, 0) + 1
+        # Expected format: [ElementCharge]
+        m = match(r"^\[([A-Z][a-z]?)(.*)\]$", atom.name)
+        if m !== nothing
+            element = m.captures[1]
+            charge_str = m.captures[2]
+
+            atoms[element] = get(atoms, element, 0) + 1
+
+            if !isempty(charge_str)
+                sign = occursin("-", charge_str) ? -1 : 1
+                num_str = filter(isdigit, charge_str)
+                val = isempty(num_str) ?
+                      length(filter(c -> c == '+' || c == '-', charge_str)) :
+                      parse(Int, num_str)
+                net_charge += sign * val
+            end
+        else
+            atoms[atom.name] = get(atoms, atom.name, 0) + 1
+        end
     end
+
+    if net_charge != 0
+        atoms["charge"] = net_charge
+    end
+
     return atoms
 end
 

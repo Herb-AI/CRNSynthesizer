@@ -5,7 +5,8 @@ function synthesize_molecules(
         fragment_rules::Dict{Int, Set{Expr}} = Dict{Int, Set{Expr}}(),
         starting_fragments::Vector{Expr} = Expr[]
 )::Vector{Molecule}
-    grammar = SMILES_grammar(atom_valences; settings = settings, fragment_rules = fragment_rules,
+    grammar = SMILES_grammar(
+        atom_valences; settings = settings, fragment_rules = fragment_rules,
         starting_fragments = starting_fragments)
     iterator = get_iterator(settings, grammar, starting_element)
 

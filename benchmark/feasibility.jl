@@ -75,8 +75,15 @@ end
 function parse_rxn_cached(rxn_str::SubString{String})::Tuple{
         Vector{Molecule}, Vector{Molecule}}
     # Pre-process to convert free hydrogen/oxygen representations to stable molecules
-    processed_rxn = replace(rxn_str, "[H].[H]" => "[H]-[H]")
-    processed_rxn = replace(processed_rxn, "[O].[O]" => "[O]=[O]")
+    # We use lookarounds to ensure we only replace isolated atoms, making an exception
+    # if the bond is already explicit (e.g. [H][H] or [H]-[H] or [O]=[O]).
+    processed_rxn = replace(rxn_str, r"(?<=^|\.|>>)(\[H\])\.(\[H\])(?=$|\.|>>)" => s"\1-\2")
+    processed_rxn = replace(processed_rxn, r"(?<=^|\.|>>)(\[O\])\.(\[O\])(?=$|\.|>>)" =>
+        s"\1=\2")
+
+    # Replace any leftover standalone [H] and [O]
+    processed_rxn = replace(processed_rxn, r"(?<=^|\.|>>)\[H\](?=$|\.|>>)" => "[H]-[H]")
+    processed_rxn = replace(processed_rxn, r"(?<=^|\.|>>)\[O\](?=$|\.|>>)" => "[O]=[O]")
 
     rxn_parts = split(processed_rxn, ">>")
     if length(rxn_parts) != 2
@@ -315,8 +322,8 @@ function run_problem_synthesis(
             :unique_candidates => true, :similarity_metric => metric,
             :similarity_combine => combine_method)
     )
-    reaction_settings = SynthesizerSettings(; max_programs = 50000,
-        max_time = max_time, max_depth = 10, goal = get_reactions(problem.goal_network),
+    reaction_settings = SynthesizerSettings(; max_programs = 30000,
+        max_time = max_time, max_depth = 5, goal = get_reactions(problem.goal_network),
         benchmark_type = UntilFound,
         options = Dict{Symbol, Any}(
             :unique_candidates => true, :similarity_metric => metric,
@@ -367,7 +374,7 @@ function run_problem_synthesis(
             :unique_candidates => true, :similarity_metric => metric,
             :similarity_combine => combine_method)
     )
-    pipeline_reaction_settings = SynthesizerSettings(; max_programs = 50000,
+    pipeline_reaction_settings = SynthesizerSettings(; max_programs = 10000,
         max_time = max_time, max_depth = 5, goal = get_reactions(problem.goal_network),
         benchmark_type = UntilFound,
         options = Dict{Symbol, Any}(
@@ -392,8 +399,8 @@ function run_problem_synthesis(
             pipeline_molecule_settings,
             pipeline_reaction_settings,
             network_settings;
-            initial_molecules_count = 1000,
-            initial_reactions_count = 50000,
+            initial_molecules_count = 5000,
+            initial_reactions_count = 30000,
             fragment_rules = fragment_rules,
             starting_fragments = starting_fragments
         )
@@ -504,7 +511,7 @@ end
 # Automated SynRXN rbl Benchmark
 # -------------------------------------------------------------
 function run_automated_rbl_benchmark(;
-        dataset::String = "mos", max_time::Int = 45, max_scan::Int = 12000, max_synthesis_runs::Int = 5)
+        dataset::String = "mos", max_time::Int = 15, max_scan::Int = 12000, max_synthesis_runs::Int = 5)
     println()
     println("=======================================================")
     println("Running Automated SynRXN rbl/$dataset Feasibility Benchmark")
@@ -531,6 +538,14 @@ function run_automated_rbl_benchmark(;
         r_id = row.r_id
         rxn_str = row.rxn
         gt_str = row.ground_truth
+
+        if ismissing(rxn_str) || ismissing(gt_str)
+            infeasible_count += 1
+            println("  \033[31m✗ Missing reaction data for record $r_id\033[0m")
+            reason = "Missing reaction data"
+            infeasible_reasons[reason] = get(infeasible_reasons, reason, 0) + 1
+            continue
+        end
 
         reaction_str = rxn_str * "," * gt_str
         problem = nothing
@@ -595,31 +610,38 @@ function run_automated_rbl_benchmark(;
 
         for metric in [:none] #,:simpson, :tanimoto, :both]
             println("\n  \033[1mSimilarity Metric: $metric\033[0m")
-            successful_runs = 0
-            total_time = 0.0
 
-            for (i, (r_id, problem)) in enumerate(feasible_problems[1:synthesis_eval_limit])
-                println("    Evaluating reaction $r_id ($i/$synthesis_eval_limit)...")
-                elapsed = @elapsed success = run_problem_synthesis(
-                    problem; max_time = max_time, metric = metric, max_stage = :reactions
-                )
+            for use_fragments in [true, false]
+                frag_str = use_fragments ? "With fragments" : "Without fragments"
+                println("\n    \033[1m[$frag_str]\033[0m")
+                successful_runs = 0
+                total_time = 0.0
 
-                if success
-                    println("      \033[32m✓ Target reaction successfully synthesized in $(round(elapsed; digits=2))s!\033[0m")
-                    successful_runs += 1
-                    total_time += elapsed
-                else
-                    println("      \033[31m✗ Synthesis failed or timed out in $(round(elapsed; digits=2))s.\033[0m")
+                for (i,
+                    (r_id, problem)) in enumerate(feasible_problems[1:synthesis_eval_limit])
+                    println("      Evaluating reaction $r_id ($i/$synthesis_eval_limit)...")
+                    elapsed = @elapsed success = run_problem_synthesis(
+                        problem; max_time = max_time, metric = metric,
+                        max_stage = :reactions, use_fragments = use_fragments
+                    )
+
+                    if success
+                        println("        \033[32m✓ Target reaction successfully synthesized in $(round(elapsed; digits=2))s!\033[0m")
+                        successful_runs += 1
+                        total_time += elapsed
+                    else
+                        println("        \033[31m✗ Synthesis failed or timed out in $(round(elapsed; digits=2))s.\033[0m")
+                    end
                 end
+
+                success_rate = (successful_runs / synthesis_eval_limit) * 100
+                avg_time = successful_runs > 0 ? total_time / successful_runs : 0.0
+
+                println("\n      Synthesis Performance (Metric: $metric, $frag_str) on Feasible Subspace:")
+                println("        - Evaluated runs: $synthesis_eval_limit")
+                println("        - Success rate:   $(round(success_rate; digits=1))%")
+                println("        - Average time:   $(round(avg_time; digits=2))s")
             end
-
-            success_rate = (successful_runs / synthesis_eval_limit) * 100
-            avg_time = successful_runs > 0 ? total_time / successful_runs : 0.0
-
-            println("\n    Synthesis Performance (Metric: $metric) on Feasible Subspace:")
-            println("      - Evaluated runs: $synthesis_eval_limit")
-            println("      - Success rate:   $(round(success_rate; digits=1))%")
-            println("      - Average time:   $(round(avg_time; digits=2))s")
         end
     else
         println("\nNo feasible problems found to evaluate.")
@@ -630,4 +652,4 @@ end
 
 #run_hardcoded_benchmarks()
 
-run_automated_rbl_benchmark(; dataset = "mbs", max_scan = typemax(Int), max_synthesis_runs = typemax(Int))
+run_automated_rbl_benchmark(; dataset = "mbs", max_scan = 10, max_synthesis_runs = 5)

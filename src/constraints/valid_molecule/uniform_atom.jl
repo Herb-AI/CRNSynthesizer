@@ -205,7 +205,8 @@ function post_atom_constraints!(
             post_atom_constraints!(solver, push!(copy(path), 3), grammar_data)
         end
 
-        t::Symbol && if endswith(string(t), "_exit") end => begin
+        t::Symbol && if endswith(string(t), "_exit")
+        end => begin
             rule = grammar.rules[HerbCore.get_rule(node)]
 
             if rule == :("(-" * chain * ")")
@@ -216,7 +217,9 @@ function post_atom_constraints!(
             end
         end
 
-        t::Symbol && if endswith(string(t), "_entry") || startswith(string(t), "starting_") end => begin
+        t::Symbol &&
+        if endswith(string(t), "_entry") || startswith(string(t), "starting_")
+        end => begin
             for i in eachindex(node.children)
                 post_atom_constraints!(solver, push!(copy(path), i), grammar_data)
             end

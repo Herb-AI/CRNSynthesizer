@@ -323,15 +323,15 @@ end
 
 function get_bond_inventory(molecules)
     inventory = Dict{String, Int}()
-    
+
     for (number, mol) in molecules
         for bond in mol.bonds
             atom1 = string(mol.atoms[bond.from].name)
             atom2 = string(mol.atoms[bond.to].name)
-            
+
             pair = sort([atom1, atom2])
             bond_str = "$(pair[1])$(bond.bond_type)$(pair[2])"
-            
+
             inventory[bond_str] = get(inventory, bond_str, 0) + number
         end
     end
@@ -341,16 +341,16 @@ end
 function bonds_changed(reaction)
     input_inventory = get_bond_inventory(reaction.inputs)
     output_inventory = get_bond_inventory(reaction.outputs)
-    
+
     all_bond_types = union(keys(input_inventory), keys(output_inventory))
-    
+
     score = 0
     for bond_type in all_bond_types
         in_count = get(input_inventory, bond_type, 0)
         out_count = get(output_inventory, bond_type, 0)
-        
+
         score += abs(in_count - out_count)
     end
-    
+
     return score ÷ 2
 end

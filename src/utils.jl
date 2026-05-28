@@ -24,7 +24,7 @@ function convert_to_subscript(name::String)
 end
 
 function remove_all!(a::Vector{Vector{Int}}, item::Vector{Int})
-    deleteat!(a, findall(x->x==item, a))
+    deleteat!(a, findall(x -> x==item, a))
 end
 
 #########################################

@@ -14,7 +14,8 @@
 
     # Settings for the synthesizer without the ContainsReactions constraint
     settings = SynthesizerSettings(
-        max_depth = 7, options = Dict{Symbol, Any}(:disable_contains_reactions => true, :disable_contains_molecules => true)
+        max_depth = 7, options = Dict{Symbol, Any}(
+            :disable_contains_reactions => true, :disable_contains_molecules => true)
     )
 
     # Define a problem to pass required molecules and atom valences

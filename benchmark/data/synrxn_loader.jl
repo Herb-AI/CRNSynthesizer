@@ -18,16 +18,20 @@ end
 
 Return available dataset names for the given task family.
 """
-get_available_datasets(task::String; version = "v1.0.0", source = "github", gh_enable = true, kwargs...) = pyconvert(
-    Vector{String}, _synrxn_dataloader(
-        task; version, source, gh_enable, kwargs...).available_names())
+function get_available_datasets(
+        task::String; version = "v1.0.0", source = "github", gh_enable = true, kwargs...)
+    pyconvert(
+        Vector{String}, _synrxn_dataloader(
+            task; version, source, gh_enable, kwargs...).available_names())
+end
 
 """
     load_synrxn_dataset(task, name; version="v1.0.0", source="github", gh_enable=true, kwargs...) -> DataFrame
 
 Load a SynRXN dataset as a Julia `DataFrame`.
 """
-function load_synrxn_dataset(task::String, name::String; version = "v1.0.0", source = "github", gh_enable = true, kwargs...)
+function load_synrxn_dataset(task::String, name::String; version = "v1.0.0",
+        source = "github", gh_enable = true, kwargs...)
     py_df = _synrxn_dataloader(task; version, source, gh_enable, kwargs...).load(name)
     return DataFrame(PyTable(py_df))
 end

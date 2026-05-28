@@ -41,7 +41,7 @@ function synthesize_reactions(
         partial_reaction::Union{Nothing, Reaction} = nothing
 )::Vector{Reaction}
     metric_name = get(settings.options, :similarity_metric, :none)
-    
+
     # If a partial reaction is provided, do not add its known molecules to the set of possible molecules
     pool_molecules = molecules
     if !isnothing(partial_reaction)
@@ -50,7 +50,7 @@ function synthesize_reactions(
     end
 
     sorted_molecules = (isempty(known_molecules) || metric_name == :none) ? pool_molecules :
-                       sort_molecules_by_similarity(pool_molecules, known_molecules; metric_name=metric_name)
+                       sort_molecules_by_similarity(pool_molecules, known_molecules; metric_name = metric_name)
     grammar = reaction_grammar(sorted_molecules; settings = settings, partial_reaction = partial_reaction)
     iterator = get_iterator(settings, grammar, :reaction)
 
@@ -93,7 +93,8 @@ function synthesize_reactions(
         molecule_settings, start_time, molecules, nothing; check_all_candidates = true
     )
 
-    molecule_grammar = SMILES_grammar(problem.atom_valences; settings = molecule_settings, fragment_rules = fragment_rules, starting_fragments = starting_fragments)
+    molecule_grammar = SMILES_grammar(problem.atom_valences; settings = molecule_settings,
+        fragment_rules = fragment_rules, starting_fragments = starting_fragments)
     molecule_iterator = get_iterator(molecule_settings, molecule_grammar, :molecule)
 
     reactions = OrderedSet{Reaction}()
@@ -112,7 +113,9 @@ function synthesize_reactions(
             continue
         end
 
-        pool_molecules = sort_molecules_by_similarity(collect(molecules), problem.known_molecules; metric_name=metric_name, cache=molecule_score_cache)
+        pool_molecules = sort_molecules_by_similarity(
+            collect(molecules), problem.known_molecules;
+            metric_name = metric_name, cache = molecule_score_cache)
         if !isnothing(problem.partial_reaction)
             partial_mols = get_reaction_molecules(problem.partial_reaction)
             pool_molecules = filter(m -> !(m in partial_mols), pool_molecules)
@@ -143,4 +146,3 @@ function synthesize_reactions(
 
     return collect(reactions), molecules
 end
-

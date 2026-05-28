@@ -142,7 +142,7 @@ for (name, problem, num_molecules, num_reactions, num_networks) in PROBLEMS
         elapsed_time,
         " seconds."
     )
-    rank_networks(pbar, networks, problem, network_goal)#= DNF for every problem Pipelines without molecule step are not feasible based on Wijers conclusions =#
+    rank_networks(pbar, networks, problem, network_goal)
 
     #= Pipeline: Problem -> Reactions -> Networks
     elapsed_time = @elapsed (networks,

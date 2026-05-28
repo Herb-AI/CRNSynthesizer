@@ -308,8 +308,8 @@ function _find_required_holes(
                     end
                 end
             end
-            for child::Union{AbstractHole, AbstractUniformHole, AbstractRuleNode} in
-                get_children(node)
+            for child::Union{
+                AbstractHole, AbstractUniformHole, AbstractRuleNode} in get_children(node)
                 _find_required_holes(
                     solver,
                     child,
@@ -329,8 +329,8 @@ function _find_required_holes(
                 return found_places
             end
 
-            for child::Union{AbstractHole, AbstractUniformHole, AbstractRuleNode} in
-                get_children(node)
+            for child::Union{
+                AbstractHole, AbstractUniformHole, AbstractRuleNode} in get_children(node)
                 _find_required_holes(
                     solver,
                     child,

@@ -94,8 +94,8 @@ function HerbConstraints.propagate!(solver::Solver, constraint::LocalContainsRea
     elseif holes == 1
         # Get all the missing required molecule indices
         required_indices = nothing
-        for (found_ind, (required_molecule, indices)) in
-            enumerate(constraint.required_molecules)
+        for (found_ind,
+            (required_molecule, indices)) in enumerate(constraint.required_molecules)
             if !found[found_ind]
                 if isnothing(required_indices)
                     required_indices = Set(indices)
@@ -128,8 +128,8 @@ function check_contains_reactions(
             if !isfilled(node)
                 holes += 1
             else
-                for (found_ind, (required_molecule, indices)) in
-                    enumerate(constraint.required_molecules)
+                for (found_ind,
+                    (required_molecule, indices)) in enumerate(constraint.required_molecules)
                     if get_rule(node) in indices
                         found[found_ind] = true
                     end
@@ -145,8 +145,8 @@ function check_contains_reactions(
             if !isfilled(node)
                 holes += 1
             else
-                for (found_ind, (required_molecule, indices)) in
-                    enumerate(constraint.required_molecules)
+                for (found_ind,
+                    (required_molecule, indices)) in enumerate(constraint.required_molecules)
                     if get_rule(node) in indices
                         found[found_ind] = true
                     end

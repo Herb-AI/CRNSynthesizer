@@ -16,7 +16,6 @@
     #println("Fragment rules: ", entry_fragments)
     #println("Starting fragments: ", starting_fragments)
 
-    
     settings = SynthesizerSettings(
         max_depth = 4, options = Dict{Symbol, Any}(:unique_candidates => true))
     fragment_molecules = synthesize_molecules(
@@ -26,7 +25,7 @@
     @test length(fragment_molecules) > length(unique_molecules)
     #println(fragment_molecules)
     #println("Number of unique fragment-based molecules synthesized: ",
-      #length(fragment_molecules))
+    #length(fragment_molecules))
 end
 
 @testitem "SMILES Unique Digit Remapping" begin
@@ -37,3 +36,39 @@ end
     @test occursin("2", explicit_smiles2)
 end
 
+@testitem "Ions Synthesis" begin
+    using DataStructures
+
+    ion_smiles = [
+        "[Cl-]",
+        "[Br-]",
+        "[I-]",
+        "[F-]",
+        "[K+]",
+        "[Na+]",
+        "[Cu+]",
+        "[Li+]",
+        "[Mg+2]",
+        "[S-2]"
+    ]
+
+    molecules = [from_SMILES(s) for s in ion_smiles]
+    atom_valences = get_valences_from_molecules(molecules)
+
+    # Verify that valences are extracted properly (each ion has 0 valence)
+    for s in keys(atom_valences)
+        @test atom_valences[s] == 0
+    end
+
+    settings = SynthesizerSettings(
+        max_depth = 4,
+        options = Dict{Symbol, Any}(:unique_candidates => true)
+    )
+    synthesized = synthesize_molecules(atom_valences; settings = settings)
+
+    # Verify that all introduced ions are present in the output of the synthesizer
+    for mol in molecules
+        target = to_SMILES(mol)
+        @test any(to_SMILES(m) == target for m in synthesized)
+    end
+end

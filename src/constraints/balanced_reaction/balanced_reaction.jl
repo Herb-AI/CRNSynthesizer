@@ -1,7 +1,7 @@
 struct BalancedReaction <: AbstractGrammarConstraint
     complete_grammar::Bool
 
-    function BalancedReaction(;complete_grammar::Bool = true)
+    function BalancedReaction(; complete_grammar::Bool = true)
         return new(complete_grammar)
     end
 end
@@ -142,32 +142,33 @@ function get_prefilled_atoms(solver::Solver, path::Vector{Int})
     end
     rule = HerbCore.get_rule(node)
     rule_expr = solver.grammar.rules[rule]
-    
-    @match rule_expr begin
-        :(Reaction(vcat(molecule_list, input_molecules), vcat(molecule_list, output_molecules))) => begin
-            # Safety check: ensure children are fully instantiated before extracting prefilled atoms
-            if !isfilled(node.children[2]) || !isfilled(node.children[4])
-                return Dict{String, Int}(), Dict{String, Int}()
-            end
 
-            input_rule = HerbCore.get_rule(node.children[2])
-            inputs_vec = solver.grammar.rules[input_rule]
-            
-            output_rule = HerbCore.get_rule(node.children[4])
-            outputs_vec = solver.grammar.rules[output_rule]
-            
-            left_atoms = Dict{String, Int}()
-            for mol in inputs_vec
-                left_atoms = mergewith(+, left_atoms, count_atoms(mol))
+    @match rule_expr begin
+        :(Reaction(vcat(molecule_list, input_molecules), vcat(molecule_list, output_molecules))) =>
+            begin
+                # Safety check: ensure children are fully instantiated before extracting prefilled atoms
+                if !isfilled(node.children[2]) || !isfilled(node.children[4])
+                    return Dict{String, Int}(), Dict{String, Int}()
+                end
+
+                input_rule = HerbCore.get_rule(node.children[2])
+                inputs_vec = solver.grammar.rules[input_rule]
+
+                output_rule = HerbCore.get_rule(node.children[4])
+                outputs_vec = solver.grammar.rules[output_rule]
+
+                left_atoms = Dict{String, Int}()
+                for mol in inputs_vec
+                    left_atoms = mergewith(+, left_atoms, count_atoms(mol))
+                end
+
+                right_atoms = Dict{String, Int}()
+                for mol in outputs_vec
+                    right_atoms = mergewith(+, right_atoms, count_atoms(mol))
+                end
+
+                return left_atoms, right_atoms
             end
-            
-            right_atoms = Dict{String, Int}()
-            for mol in outputs_vec
-                right_atoms = mergewith(+, right_atoms, count_atoms(mol))
-            end
-            
-            return left_atoms, right_atoms
-        end
         _ => return Dict{String, Int}(), Dict{String, Int}()
     end
 end
@@ -178,12 +179,13 @@ function post_reaction_constraints!(solver::Solver, reaction_paths::Vector{Vecto
         node = get_node_at_location(solver, path)
         rule = HerbCore.get_rule(node)
         rule_expr = solver.grammar.rules[rule]
-        
+
         is_partial = @match rule_expr begin
-            :(Reaction(vcat(molecule_list, input_molecules), vcat(molecule_list, output_molecules))) => true
+            :(Reaction(vcat(molecule_list, input_molecules), vcat(molecule_list, output_molecules))) =>
+                true
             _ => false
         end
-                     
+
         input_paths = get_molecule_paths(solver, push!(copy(path), 1))
         output_paths = get_molecule_paths(solver, push!(copy(path), is_partial ? 3 : 2))
 
@@ -258,7 +260,8 @@ function HerbConstraints.on_new_node(
             rule = HerbCore.get_rule(node)
             rule_expr = solver.grammar.rules[rule]
             is_partial = @match rule_expr begin
-                :(Reaction(vcat(molecule_list, input_molecules), vcat(molecule_list, output_molecules))) => true
+                :(Reaction(vcat(molecule_list, input_molecules), vcat(molecule_list, output_molecules))) =>
+                    true
                 _ => false
             end
 
@@ -278,7 +281,8 @@ function HerbConstraints.on_new_node(
                 solver, input_paths; rule_counts = rule_to_atoms, prefilled_atoms = prefilled_left
             )
             possible_right = get_possibilities(
-                solver, output_paths; rule_counts = rule_to_atoms, prefilled_atoms = prefilled_right
+                solver, output_paths; rule_counts = rule_to_atoms,
+                prefilled_atoms = prefilled_right
             )
 
             left_length = length(possible_left)
@@ -360,7 +364,7 @@ function get_possibilities(
         end
     end
     union!(all_keys, keys(prefilled_atoms))
-    
+
     sorted_atoms = sort(collect(all_keys))
     atom_indices = Dict{String, Int}(atom => i for (i, atom) in enumerate(sorted_atoms))
     n_atoms = max(length(sorted_atoms), 1)
@@ -530,6 +534,9 @@ function is_valid(candidate::Reaction, constraint::BalancedReaction)
             output_counts[atom] = get(output_counts, atom, 0) + count * num
         end
     end
+
+    filter!(p -> p.second != 0, input_counts)
+    filter!(p -> p.second != 0, output_counts)
 
     if input_counts != output_counts
         return false
