@@ -8,7 +8,15 @@ include("data/estherification.jl")
 include("data/water.jl")
 include("data/methane.jl")
 include("data/ethylene.jl")
-include("data/SYN_problems.jl")
+function fix_single_atom_molecule(smiles::AbstractString)::String
+    if smiles == "[H]"
+        return "[H]-[H]"
+    end
+    if smiles == "[O]"
+        return "[O]=[O]"
+    end
+    return String(smiles)
+end
 
 include("data/synrxn_loader.jl")
 import .SynRXNLoader
@@ -85,13 +93,16 @@ function parse_rxn_cached(rxn_str::SubString{String})::Tuple{
     reactants_smiles = filter(!isempty, map(strip, split(reactants_part, ".")))
     products_smiles = filter(!isempty, map(strip, split(products_part, ".")))
 
+    map!(fix_single_atom_molecule, reactants_smiles)
+    map!(fix_single_atom_molecule, products_smiles)
+
     reactants = [get_parsed_molecule_cached(String(s)) for s in reactants_smiles]
     products = [get_parsed_molecule_cached(String(s)) for s in products_smiles]
 
     return reactants, products
 end
 
-function parse_syn_problem(reaction_str::String)::ProblemDefinition
+function parse_syn_problem(reaction_str::AbstractString)::ProblemDefinition
     parts = split(reaction_str, ",")
     if length(parts) != 2
         error("Invalid input format: expected two reaction strings separated by a comma")
@@ -294,7 +305,7 @@ function run_problem_synthesis(
             :similarity_combine => combine_method)
     )
     reaction_settings = SynthesizerSettings(; max_programs = 50000,
-        max_time = max_time, max_depth = 5, goal = get_reactions(problem.goal_network),
+        max_time = max_time, max_depth = 10, goal = get_reactions(problem.goal_network),
         benchmark_type = UntilFound,
         options = Dict{Symbol, Any}(
             :unique_candidates => true, :similarity_metric => metric,
@@ -398,6 +409,11 @@ function run_problem_synthesis(
     end
 
     return issubset([problem.goal_network], networks)
+end
+
+function syn_problem()
+    DEFAULT_SYN_STR = "CC(C)(C)OC(=O)CONC(=O)NCc1cccc2ccccc12>>O=C(O)CONC(=O)NCc1cccc2ccccc12,CC(C)(C)OC(=O)CONC(=O)NCc1cccc2ccccc12.O>>O=C(O)CONC(=O)NCc1cccc2ccccc12.CC(C)(C)O"
+    return parse_syn_problem(DEFAULT_SYN_STR)
 end
 
 const PROBLEMS = [
@@ -566,7 +582,7 @@ function run_automated_rbl_benchmark(;
     if synthesis_eval_limit > 0
         println("\nEvaluating synthesis (stages molecules -> reactions only) on the first $synthesis_eval_limit feasible problems...")
 
-        for metric in [:none]#, :simpson, :tanimoto, :both]
+        for metric in [:simpson, :tanimoto, :both]
             println("\n  \033[1mSimilarity Metric: $metric\033[0m")
             successful_runs = 0
             total_time = 0.0
