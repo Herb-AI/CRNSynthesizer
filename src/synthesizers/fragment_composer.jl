@@ -120,9 +120,9 @@ function make_fragment_custom_explicit(smiles::String)::Tuple{Int, Expr, Expr}
 end
 
 function make_smiles_rdkit_explicit(smiles::String)::String
-    mol = RDKitMinimalLib.get_mol(smiles)
-    RDKitMinimalLib.add_hs(mol)
-    return RDKitMinimalLib.get_smiles(mol, Dict{String, Any}("allBondsExplicit" => true))
+    return MoleculeFlow.mol_to_smiles(
+        MoleculeFlow.add_hs(MoleculeFlow.mol_from_smiles(smiles));
+        kekule_smiles = true, all_bonds_explicit = true)
 end
 
 function has_connection_points(frag_smiles::String)::Bool

@@ -1,5 +1,15 @@
 using CRNSynthesizer
 
+function fix_single_atom_molecule(smiles::String)::String
+    if smiles == "[H]"
+        return "[H]-[H]"
+    end
+    if smiles == "[O]"
+        return "[O]=[O]"
+    end
+    return smiles
+end
+
 function parse_rxn(rxn_str::SubString{String})::Tuple{Vector{Molecule}, Vector{Molecule}}
     rxn_parts = split(rxn_str, ">>")
     if length(rxn_parts) != 2
@@ -10,6 +20,9 @@ function parse_rxn(rxn_str::SubString{String})::Tuple{Vector{Molecule}, Vector{M
 
     reactants_smiles = filter(!isempty, map(strip, split(reactants_part, ".")))
     products_smiles = filter(!isempty, map(strip, split(products_part, ".")))
+
+    map!(fix_single_atom_molecule, reactants_smiles)
+    map!(fix_single_atom_molecule, products_smiles)
 
     reactants = [from_SMILES(make_smiles_custom_explicit(make_smiles_rdkit_explicit(String(s))))
                     for s in reactants_smiles]
