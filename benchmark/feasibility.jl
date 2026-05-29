@@ -511,7 +511,7 @@ end
 # Automated SynRXN rbl Benchmark
 # -------------------------------------------------------------
 function run_automated_rbl_benchmark(;
-        dataset::String = "mos", max_time::Int = 15, max_scan::Int = 12000, max_synthesis_runs::Int = 5)
+        dataset::String = "mos", max_time::Int = 15, max_scan::Int = 100, max_synthesis_runs::Int = 5)
     println()
     println("=======================================================")
     println("Running Automated SynRXN rbl/$dataset Feasibility Benchmark")
@@ -608,7 +608,7 @@ function run_automated_rbl_benchmark(;
     if synthesis_eval_limit > 0
         println("\nEvaluating synthesis (stages molecules -> reactions only) on the first $synthesis_eval_limit feasible problems...")
 
-        for metric in [:none] #,:simpson, :tanimoto, :both]
+        for metric in [:none, :simpson, :tanimoto, :both]
             println("\n  \033[1mSimilarity Metric: $metric\033[0m")
 
             for use_fragments in [true, false]
@@ -652,4 +652,4 @@ end
 
 #run_hardcoded_benchmarks()
 
-run_automated_rbl_benchmark(; dataset = "mbs", max_scan = 10, max_synthesis_runs = 5)
+run_automated_rbl_benchmark(; dataset = "mbs", max_scan = 5, max_synthesis_runs = 5)

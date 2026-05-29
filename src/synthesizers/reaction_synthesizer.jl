@@ -86,6 +86,9 @@ function synthesize_reactions(
     molecules = OrderedSet{Molecule}()
     metric_name = get(reaction_settings.options, :similarity_metric, :none)
 
+    # Maximum number of molecules to pass to the reaction grammar at once
+    max_pool_size = get(reaction_settings.options, :max_reaction_pool_size, 250)
+
     for molecule in problem.known_molecules
         push!(molecules, molecule)
     end
@@ -119,6 +122,11 @@ function synthesize_reactions(
         if !isnothing(problem.partial_reaction)
             partial_mols = get_reaction_molecules(problem.partial_reaction)
             pool_molecules = filter(m -> !(m in partial_mols), pool_molecules)
+        end
+
+        # Cap the pool to prevent a combinatorial explosion in get_possibilities in balanced_reaction
+        if length(pool_molecules) > max_pool_size
+            pool_molecules = pool_molecules[1:max_pool_size]
         end
 
         reactions_grammar = reaction_grammar(
