@@ -15,7 +15,7 @@ import .SynRXNLoader
 # -------------------------------------------------------------
 # Caching wrappers to avoid expensive RDKit/MoleculeFlow calls
 # -------------------------------------------------------------
-const CACHE_SIZE = 1000
+const CACHE_SIZE = 1024
 
 const MOL_CACHE = LRU{String, Union{MoleculeFlow.Molecule, Missing}}(maxsize = CACHE_SIZE)
 const BRICS_CACHE = LRU{String, Union{Vector{String}, Missing}}(maxsize = CACHE_SIZE)
@@ -121,13 +121,13 @@ function parse_syn_problem(reaction_str::AbstractString)::ProblemDefinition
     end
 
     # Construct the target reaction with proper stoichiometry
-    reactant_counts = Dict{Molecule, Int}()
+    reactant_counts = OrderedDict{Molecule, Int}()
     for m in target_reactants
         reactant_counts[m] = get(reactant_counts, m, 0) + 1
     end
     inputs = [(reactant_counts[m], m) for m in unique(target_reactants)]
 
-    product_counts = Dict{Molecule, Int}()
+    product_counts = OrderedDict{Molecule, Int}()
     for m in target_products
         product_counts[m] = get(product_counts, m, 0) + 1
     end
@@ -137,7 +137,7 @@ function parse_syn_problem(reaction_str::AbstractString)::ProblemDefinition
     goal_network = CRNSynthesizer.ReactionNetwork([reaction])
 
     # Calculate known indices
-    incomplete_molecules = Set{Molecule}(vcat(incomplete_reactants, incomplete_products))
+    incomplete_molecules = OrderedSet{Molecule}(vcat(incomplete_reactants, incomplete_products))
     selected_known_indices = Int[]
     for (i, m) in enumerate(all_molecules)
         if m in incomplete_molecules
@@ -155,13 +155,13 @@ function parse_syn_problem(reaction_str::AbstractString)::ProblemDefinition
 
     atom_valences = get_valences_from_molecules(all_molecules)
 
-    inc_reactant_counts = Dict{Molecule, Int}()
+    inc_reactant_counts = OrderedDict{Molecule, Int}()
     for m in incomplete_reactants
         inc_reactant_counts[m] = get(inc_reactant_counts, m, 0) + 1
     end
     partial_inputs = [(inc_reactant_counts[m], m) for m in unique(incomplete_reactants)]
 
-    inc_product_counts = Dict{Molecule, Int}()
+    inc_product_counts = OrderedDict{Molecule, Int}()
     for m in incomplete_products
         inc_product_counts[m] = get(inc_product_counts, m, 0) + 1
     end
@@ -266,7 +266,7 @@ function run_problem_synthesis(
         max_stage::Symbol = :networks,
         use_fragments::Bool = true
 )::Bool
-    fragment_rules = Dict{Int, Set{Expr}}()
+    fragment_rules = OrderedDict{Int, Vector{Expr}}()
     starting_fragments = Expr[]
 
     if use_fragments
@@ -274,7 +274,8 @@ function run_problem_synthesis(
             e, s = parse_molecule_to_fragment_rules(m.canonical_smiles)
             for (k, v) in e
                 if haskey(fragment_rules, k)
-                    union!(fragment_rules[k], v)
+                    append!(fragment_rules[k], v)
+                    unique!(fragment_rules[k])
                 else
                     fragment_rules[k] = v
                 end
@@ -374,7 +375,7 @@ function run_problem_synthesis(
             :unique_candidates => true, :similarity_metric => metric,
             :similarity_combine => combine_method)
     )
-    pipeline_reaction_settings = SynthesizerSettings(; max_programs = 10000,
+    pipeline_reaction_settings = SynthesizerSettings(; max_programs = 30000,
         max_time = max_time, max_depth = 5, goal = get_reactions(problem.goal_network),
         benchmark_type = UntilFound,
         options = Dict{Symbol, Any}(
@@ -650,6 +651,6 @@ function run_automated_rbl_benchmark(;
     println("=======================================================")
 end
 
-#run_hardcoded_benchmarks()
+run_hardcoded_benchmarks()
 
 run_automated_rbl_benchmark(; dataset = "mbs", max_scan = 5, max_synthesis_runs = 5)

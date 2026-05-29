@@ -76,7 +76,7 @@ function synthesize_networks(
         network_settings::SynthesizerSettings;
         initial_molecules_count::Int = 100,
         pbar = nothing,
-        fragment_rules::Dict{Int, Set{Expr}} = Dict{Int, Set{Expr}}(),
+        fragment_rules::OrderedDict{Int, Vector{Expr}} = OrderedDict{Int, Vector{Expr}}(),
         starting_fragments::Vector{Expr} = Expr[]
 )
     molecule_job = nothing
@@ -248,7 +248,7 @@ function synthesize_networks(
         initial_molecules_count::Int = 10,
         initial_reactions_count::Int = 1000,
         pbar = nothing,
-        fragment_rules::Dict{Int, Set{Expr}} = Dict{Int, Set{Expr}}(),
+        fragment_rules::OrderedDict{Int, Vector{Expr}} = OrderedDict{Int, Vector{Expr}}(),
         starting_fragments::Vector{Expr} = Expr[]
 )
     start_time = time()

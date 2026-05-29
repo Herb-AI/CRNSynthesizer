@@ -109,8 +109,8 @@ function network_grammar(
         reaction_to_rule[rule] = i
     end
 
-    required_molecules::Dict{
-        RequiredMolecule, Vector{Int}} = Dict{
+    required_molecules::OrderedDict{
+        RequiredMolecule, Vector{Int}} = OrderedDict{
         RequiredMolecule, Vector{Int}
     }()
     for required_molecule in problem.required_molecules

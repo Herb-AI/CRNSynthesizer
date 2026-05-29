@@ -7,7 +7,7 @@ digits = Dict(
 
 struct ValidSMILES <: AbstractGrammarConstraint
     grammar_data::GrammarData
-    atom_valences::Dict{String, Int}
+    atom_valences::OrderedDict{String, Int}
 end
 
 function ValidSMILES(grammar::ContextSensitiveGrammar, atom_valences::OrderedDict{

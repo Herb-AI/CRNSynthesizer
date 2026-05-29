@@ -27,10 +27,10 @@ function HerbCore.update_rule_indices!(
 end
 
 struct AtomCounts
-    atom_counts::Dict{String, Int}
+    atom_counts::OrderedDict{String, Int}
     hash::UInt
 end
-function AtomCounts(atom_counts::Dict{String, Int})
+function AtomCounts(atom_counts::OrderedDict{String, Int})
     return AtomCounts(atom_counts, hash(atom_counts))
 end
 
@@ -57,7 +57,7 @@ struct ReactionPossibility
     atom_counts::AtomCounts
     hash::UInt
 end
-function ReactionPossibility(rules::Vector{Int}, atom_counts::Dict{String, Int})
+function ReactionPossibility(rules::Vector{Int}, atom_counts::OrderedDict{String, Int})
     atom_counts = AtomCounts(atom_counts)
     return ReactionPossibility(rules, atom_counts, hash(rules, hash(atom_counts)))
 end
@@ -85,7 +85,7 @@ struct LocalBalancedReaction <: AbstractLocalConstraint
     path::Vector{Int}
     input_molecule_paths::Vector{Vector{Int}}
     output_molecule_paths::Vector{Vector{Int}}
-    rule_to_atoms::Dict{Int, Dict{Any, Any}}
+    rule_to_atoms::Dict{Int, Dict{String, Int}}
     left_possibilities::Vector{ReactionPossibility}
     right_possibilities::Vector{ReactionPossibility}
 end
@@ -138,7 +138,7 @@ end
 function get_prefilled_atoms(solver::Solver, path::Vector{Int})
     node = get_node_at_location(solver, path)
     if node isa Hole
-        return Dict{String, Int}(), Dict{String, Int}()
+        return OrderedDict{String, Int}(), OrderedDict{String, Int}()
     end
     rule = HerbCore.get_rule(node)
     rule_expr = solver.grammar.rules[rule]
@@ -148,7 +148,7 @@ function get_prefilled_atoms(solver::Solver, path::Vector{Int})
             begin
                 # Safety check: ensure children are fully instantiated before extracting prefilled atoms
                 if !isfilled(node.children[2]) || !isfilled(node.children[4])
-                    return Dict{String, Int}(), Dict{String, Int}()
+                    return OrderedDict{String, Int}(), OrderedDict{String, Int}()
                 end
 
                 input_rule = HerbCore.get_rule(node.children[2])
@@ -157,19 +157,19 @@ function get_prefilled_atoms(solver::Solver, path::Vector{Int})
                 output_rule = HerbCore.get_rule(node.children[4])
                 outputs_vec = solver.grammar.rules[output_rule]
 
-                left_atoms = Dict{String, Int}()
+                left_atoms = OrderedDict{String, Int}()
                 for mol in inputs_vec
                     left_atoms = mergewith(+, left_atoms, count_atoms(mol))
                 end
 
-                right_atoms = Dict{String, Int}()
+                right_atoms = OrderedDict{String, Int}()
                 for mol in outputs_vec
                     right_atoms = mergewith(+, right_atoms, count_atoms(mol))
                 end
 
                 return left_atoms, right_atoms
             end
-        _ => return Dict{String, Int}(), Dict{String, Int}()
+        _ => return OrderedDict{String, Int}(), OrderedDict{String, Int}()
     end
 end
 
@@ -189,7 +189,7 @@ function post_reaction_constraints!(solver::Solver, reaction_paths::Vector{Vecto
         input_paths = get_molecule_paths(solver, push!(copy(path), 1))
         output_paths = get_molecule_paths(solver, push!(copy(path), is_partial ? 3 : 2))
 
-        rule_to_atoms = Dict{Int, Dict{Any, Any}}()
+        rule_to_atoms = Dict{Int, Dict{String, Int}}()
         molecule_rules = findall(solver.grammar.domains[:molecule])
 
         for rule in molecule_rules
@@ -268,7 +268,7 @@ function HerbConstraints.on_new_node(
             input_paths = get_molecule_paths(solver, push!(copy(path), 1))
             output_paths = get_molecule_paths(solver, push!(copy(path), is_partial ? 3 : 2))
 
-            rule_to_atoms = Dict{Int, Dict{Any, Any}}()
+            rule_to_atoms = Dict{Int, Dict{String, Int}}()
             molecule_rules = findall(solver.grammar.domains[:molecule])
 
             for rule in molecule_rules
@@ -326,8 +326,8 @@ function HerbConstraints.shouldschedule(
     return false
 end
 
-function count_atoms(solver::Solver, paths::Vector{Vector{Int}})::Dict{String, Int}
-    result = Dict{String, Int}()
+function count_atoms(solver::Solver, paths::Vector{Vector{Int}})::OrderedDict{String, Int}
+    result = OrderedDict{String, Int}()
     for path in paths
         node = get_node_at_location(solver, path)
         type = get_node_type(solver.grammar, node)
@@ -348,12 +348,12 @@ end
 function get_possibilities(
         solver::Solver,
         paths::Vector{Vector{Int}};
-        rule_counts::Dict{Int, Dict{Any, Any}} = Dict{Int, Dict{Any, Any}}(),
-        prefilled_atoms::Dict{String, Int} = Dict{String, Int}()
+        rule_counts::Dict{Int, Dict{String, Int}} = Dict{Int, Dict{String, Int}}(),
+        prefilled_atoms::OrderedDict{String, Int} = OrderedDict{String, Int}()
 )
 
     # Build atom indices dynamically based on the elements and charges present in the grammar
-    all_keys = Set{String}()
+    all_keys = OrderedSet{String}()
     for (rule, counts) in rule_counts
         union!(all_keys, keys(counts))
     end
@@ -366,7 +366,7 @@ function get_possibilities(
     union!(all_keys, keys(prefilled_atoms))
 
     sorted_atoms = sort(collect(all_keys))
-    atom_indices = Dict{String, Int}(atom => i for (i, atom) in enumerate(sorted_atoms))
+    atom_indices = OrderedDict{String, Int}(atom => i for (i, atom) in enumerate(sorted_atoms))
     n_atoms = max(length(sorted_atoms), 1)
 
     # Initialize with prefilled atom counts
@@ -415,7 +415,7 @@ function get_possibilities(
     results = ReactionPossibility[]
 
     for (counts, rules) in current_options
-        atom_counts = Dict{String, Int}()
+        atom_counts = OrderedDict{String, Int}()
         for (i, count) in enumerate(counts)
             if count > 0
                 atom_counts[sorted_atoms[i]] = count
@@ -435,14 +435,14 @@ function HerbConstraints.propagate!(solver::Solver, constraint::LocalBalancedRea
     possible_left = copy(constraint.left_possibilities)
     for (index, path) in enumerate(constraint.input_molecule_paths)
         node = get_node_at_location(solver, path)
-        rules = Set{Int}(get_rules(node))
+        rules = OrderedSet{Int}(get_rules(node))
         filter!(x -> x.rules[index] in rules, possible_left)
     end
 
     possible_right = copy(constraint.right_possibilities)
     for (index, path) in enumerate(constraint.output_molecule_paths)
         node = get_node_at_location(solver, path)
-        rules = Set{Int}(get_rules(node))
+        rules = OrderedSet{Int}(get_rules(node))
         filter!(x -> x.rules[index] in rules, possible_right)
     end
 

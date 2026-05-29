@@ -1,6 +1,7 @@
 using CRNSynthesizer
 using Term.Progress
 using Term: with, update!
+using DataStructures
 
 include("data/estherification.jl")
 include("data/water.jl")
@@ -100,13 +101,14 @@ for (name, problem, num_molecules, num_reactions, num_networks) in PROBLEMS
         max_time = max_time, max_programs = num_networks, max_depth = 10
     )
 
-    fragment_rules = Dict{Int, Set{Expr}}()
+    fragment_rules = OrderedDict{Int, Vector{Expr}}()
     starting_fragments = Expr[]
     for m in problem.known_molecules
         e, s = parse_molecule_to_fragment_rules(m.canonical_smiles)
         for (k, v) in e
             if haskey(fragment_rules, k)
-                union!(fragment_rules[k], v)
+                append!(fragment_rules[k], v)
+                unique!(fragment_rules[k])
             else
                 fragment_rules[k] = v
             end

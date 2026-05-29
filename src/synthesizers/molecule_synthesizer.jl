@@ -2,7 +2,7 @@ function synthesize_molecules(
         atom_valences::OrderedDict{String, Int};
         settings::SynthesizerSettings = SynthesizerSettings(),
         starting_element::Union{Symbol, AbstractRuleNode} = :molecule,
-        fragment_rules::Dict{Int, Set{Expr}} = Dict{Int, Set{Expr}}(),
+        fragment_rules::OrderedDict{Int, Vector{Expr}} = OrderedDict{Int, Vector{Expr}}(),
         starting_fragments::Vector{Expr} = Expr[]
 )::Vector{Molecule}
     grammar = SMILES_grammar(

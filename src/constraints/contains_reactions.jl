@@ -1,5 +1,5 @@
 struct ContainsReactions <: AbstractGrammarConstraint
-    required_molecules::Dict{RequiredMolecule, Vector{Int}}
+    required_molecules::OrderedDict{RequiredMolecule, Vector{Int}}
 end
 
 function ContainsReactions(
@@ -12,8 +12,8 @@ function ContainsReactions(
         reaction_to_rule[rule] = i
     end
 
-    required_molecules::Dict{
-        RequiredMolecule, Vector{Int}} = Dict{
+    required_molecules::OrderedDict{
+        RequiredMolecule, Vector{Int}} = OrderedDict{
         RequiredMolecule, Vector{Int}
     }()
     for required_molecule in problem_required_molecules
@@ -58,7 +58,7 @@ end
 
 struct LocalContainsReactions <: AbstractLocalConstraint
     path::Vector{Int}
-    required_molecules::Dict{RequiredMolecule, Vector{Int}}
+    required_molecules::OrderedDict{RequiredMolecule, Vector{Int}}
 end
 
 function HerbConstraints.on_new_node(

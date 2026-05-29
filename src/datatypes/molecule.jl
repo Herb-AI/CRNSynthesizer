@@ -204,7 +204,7 @@ function to_compact(molecule::Molecule)
 
     # Convert the compact representation to a string
     compact_str = ""
-    for (atom_name, count) in atoms
+    for (atom_name, count) in sort(collect(atoms); by = x -> x[1])
         if count > 1
             compact_str *= "$atom_name$count"
         else

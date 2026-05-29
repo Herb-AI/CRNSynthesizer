@@ -3,14 +3,19 @@ struct Reaction
     inputs::Vector{Tuple{Int, Molecule}}
     outputs::Vector{Tuple{Int, Molecule}}
     ignore_balanced::Bool
+
+    function Reaction(
+            rate::Union{Nothing, Float64},
+            inputs::Vector{Tuple{Int, Molecule}},
+            outputs::Vector{Tuple{Int, Molecule}},
+            ignore_balanced::Bool = false
+    )
+        sorted_inputs = sort(inputs; by = x -> x[2].canonical_smiles)
+        sorted_outputs = sort(outputs; by = x -> x[2].canonical_smiles)
+        new(rate, sorted_inputs, sorted_outputs, ignore_balanced)
+    end
 end
-function Reaction(
-        rate::Union{Nothing, Float64},
-        inputs::Vector{Tuple{Int, Molecule}},
-        outputs::Vector{Tuple{Int, Molecule}}
-)
-    Reaction(rate, inputs, outputs, false)
-end
+
 function Reaction(
         inputs::Vector{Tuple{Int, Molecule}}, outputs::Vector{Tuple{Int, Molecule}})
     Reaction(nothing, inputs, outputs, false)
@@ -58,7 +63,7 @@ function ==(a::Reaction, b::Reaction)
 end
 
 function Reaction(inputs::Vector{Molecule}, outputs::Vector{Molecule})
-    input_dict = Dict{Molecule, Int}()
+    input_dict = OrderedDict{Molecule, Int}()
     for (i, input) in enumerate(inputs)
         if haskey(input_dict, input)
             input_dict[input] += 1
@@ -68,7 +73,7 @@ function Reaction(inputs::Vector{Molecule}, outputs::Vector{Molecule})
     end
     inputs = [(input_dict[input], input) for input in keys(input_dict)]
 
-    output_dict = Dict{Molecule, Int}()
+    output_dict = OrderedDict{Molecule, Int}()
     for (i, output) in enumerate(outputs)
         if haskey(output_dict, output)
             output_dict[output] += 1
@@ -90,7 +95,7 @@ function get_reactions(network::ReactionNetwork)
 end
 
 function get_molecules(network::ReactionNetwork)::Vector{Molecule}
-    molecules = Set{Molecule}()
+    molecules = OrderedSet{Molecule}()
     for reaction in network.reactions
         for (count, molecule) in reaction.inputs
             push!(molecules, molecule)
@@ -99,7 +104,7 @@ function get_molecules(network::ReactionNetwork)::Vector{Molecule}
             push!(molecules, molecule)
         end
     end
-    return collect(molecules)
+    return sort(collect(molecules); by = m -> m.canonical_smiles)
 end
 
 #=function get_atoms(network::ReactionNetwork)::Vector{String}
@@ -304,7 +309,7 @@ end
 
 function count_species(network)
     # Count the number of unique species in the network
-    unique_species = Set{Molecule}()
+    unique_species = OrderedSet{Molecule}()
     for reaction in network.reactions
         for input in reaction.inputs
             push!(unique_species, input[2])

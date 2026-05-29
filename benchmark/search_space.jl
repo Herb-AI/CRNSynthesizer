@@ -456,13 +456,14 @@ for (name, problem) in PROBLEMS
     println("\033[1mBenchmarking Search Space: $name\033[0m")
 
     # Extract and merge fragments from the target molecules
-    fragment_rules = Dict{Int, Set{Expr}}()
+    fragment_rules = OrderedDict{Int, Vector{Expr}}()
     starting_fragments = Expr[]
     for m in problem.known_molecules
         e, s = parse_molecule_to_fragment_rules(m.canonical_smiles)
         for (k, v) in e
             if haskey(fragment_rules, k)
-                union!(fragment_rules[k], v)
+                append!(fragment_rules[k], v)
+                unique!(fragment_rules[k])
             else
                 fragment_rules[k] = v
             end
@@ -475,7 +476,7 @@ for (name, problem) in PROBLEMS
     for use_fragments in [false, true]
         println("\n  \033[1mUse Fragments: $use_fragments\033[0m")
 
-        fr = use_fragments ? fragment_rules : Dict{Int, Set{Expr}}()
+        fr = use_fragments ? fragment_rules : OrderedDict{Int, Vector{Expr}}()
         sf = use_fragments ? starting_fragments : Expr[]
 
         # Molecules Search Space

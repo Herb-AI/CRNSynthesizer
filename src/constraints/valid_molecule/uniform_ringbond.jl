@@ -87,7 +87,7 @@ function HerbConstraints.propagate!(solver::Solver, constraint::localUniformRing
     end
 
     # Get the filled ringbond digits
-    filled_ringbonds = Dict{Int, Tuple}()
+    filled_ringbonds = OrderedDict{Int, Tuple}()
     for (ringbond_path, _) in constraint.ringbond_paths
         digit = get_node_at_location(solver, get_digit_path(solver, ringbond_path))
         if isfilled(digit)
@@ -130,7 +130,7 @@ function HerbConstraints.propagate!(solver::Solver, constraint::localUniformRing
 
     # Check that a group should not have the same digits
     for group in constraint.connected_groups
-        seen = Set{Int}()
+        seen = OrderedSet{Int}()
         # println("Group: ", group)
         # Filter empty paths from the group
         group = filter(path -> !isempty(path), group)
@@ -151,7 +151,7 @@ function HerbConstraints.propagate!(solver::Solver, constraint::localUniformRing
     end
 
     # Check that there are no two ringbonds between the same two atoms
-    filled_atoms = Dict{Int, Tuple}()
+    filled_atoms = OrderedDict{Int, Tuple}()
     for (ringbond_path, atom_path) in constraint.ringbond_paths
         digit = get_node_at_location(solver, get_digit_path(solver, ringbond_path))
         if isfilled(digit)
@@ -169,7 +169,7 @@ function HerbConstraints.propagate!(solver::Solver, constraint::localUniformRing
         end
     end
     # println("Filled atoms: ", filled_atoms)
-    filled_atom_pairs = Dict{Tuple, Int}()
+    filled_atom_pairs = OrderedDict{Tuple, Int}()
     for (rule, (atom1, atom2)) in collect(filled_atoms)
         if !isnothing(atom2)
             highest_atom = max(atom1, atom2)
@@ -394,7 +394,7 @@ function get_ringbond_paths(
 
             # Data structures for tracking matching trailing ringbonds
             saved_atom_ringbonds = Vector{Vector{Tuple{Vector{Int}, Vector{Int}}}}()
-            digit_to_virtual_atom = Dict{Int, Int}()
+            digit_to_virtual_atom = OrderedDict{Int, Int}()
             matching_pairs = Vector{Tuple{Int, Int}}()
 
             args = rule isa Expr ? rule.args[2:end] : [rule]

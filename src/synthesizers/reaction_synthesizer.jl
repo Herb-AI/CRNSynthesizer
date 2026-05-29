@@ -78,7 +78,7 @@ function synthesize_reactions(
         molecule_settings::SynthesizerSettings,
         reaction_settings::SynthesizerSettings;
         initial_molecules_count::Int = 10,
-        fragment_rules::Dict{Int, Set{Expr}} = Dict{Int, Set{Expr}}(),
+        fragment_rules::OrderedDict{Int, Vector{Expr}} = OrderedDict{Int, Vector{Expr}}(),
         starting_fragments::Vector{Expr} = Expr[]
 )
     start_time = time()

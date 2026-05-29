@@ -26,8 +26,8 @@ end
 function HerbConstraints.propagate!(
         solver::Solver, constraint::LocalUniformBalancedReaction
 )
-    input_atoms = Dict{Int, Int}()
-    possible_inputs = Dict{Int, Int}()
+    input_atoms = OrderedDict{Int, Int}()
+    possible_inputs = OrderedDict{Int, Int}()
     unfilled_inputs = 0
     for input_path in constraint.input_atom_paths
         atom = get_node_at_location(solver, input_path)
@@ -51,8 +51,8 @@ function HerbConstraints.propagate!(
         end
     end
 
-    output_atoms = Dict{Int, Int}()
-    possible_outputs = Dict{Int, Int}()
+    output_atoms = OrderedDict{Int, Int}()
+    possible_outputs = OrderedDict{Int, Int}()
     unfilled_outputs = 0
     for output_path in constraint.output_atom_paths
         if !isfilled(get_node_at_location(solver, output_path))
