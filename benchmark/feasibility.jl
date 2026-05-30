@@ -1,522 +1,59 @@
 using CRNSynthesizer
 using DataFrames
-import MoleculeFlow
-using DataStructures
-using LRUCache
+using Dates
 
 include("data/estherification.jl")
 include("data/water.jl")
 include("data/methane.jl")
 include("data/ethylene.jl")
-
 include("data/synrxn_loader.jl")
 import .SynRXNLoader
 
-# -------------------------------------------------------------
-# Caching wrappers to avoid expensive RDKit/MoleculeFlow calls
-# -------------------------------------------------------------
-const CACHE_SIZE = 1024
-
-const MOL_CACHE = LRU{String, Union{MoleculeFlow.Molecule, Missing}}(maxsize = CACHE_SIZE)
-const BRICS_CACHE = LRU{String, Union{Vector{String}, Missing}}(maxsize = CACHE_SIZE)
-const CLEANED_FRAG_CACHE = LRU{String, Union{MoleculeFlow.Molecule, Missing}}(maxsize = CACHE_SIZE)
-const PARSED_MOLECULE_CACHE = LRU{String, Molecule}(maxsize = CACHE_SIZE)
-const FRAG_ATOM_COUNT_CACHE = LRU{String, Int}(maxsize = CACHE_SIZE)
-const MOL_ATOM_COUNT_CACHE = LRU{String, Int}(maxsize = CACHE_SIZE)
-
-function get_mol_cached(smiles::String)::Union{MoleculeFlow.Molecule, Missing}
-    get!(MOL_CACHE, smiles) do
-        MoleculeFlow.mol_from_smiles(smiles)
-    end
-end
-
-function get_brics_cached(smiles::String)::Union{Vector{String}, Missing}
-    get!(BRICS_CACHE, smiles) do
-        mol = get_mol_cached(smiles)
-        if ismissing(mol)
-            missing
-        else
-            MoleculeFlow.brics_decompose(mol; min_fragment_size = 2)
-        end
-    end
-end
-
-function get_cleaned_frag_cached(frag_smiles::String)::Union{MoleculeFlow.Molecule, Missing}
-    get!(CLEANED_FRAG_CACHE, frag_smiles) do
-        frag_m = get_mol_cached(frag_smiles)
-        if ismissing(frag_m)
-            missing
-        else
-            MoleculeFlow.delete_substructs(frag_m, "[#0]")
-        end
-    end
-end
-
-function get_frag_atom_count_cached(frag_smiles::String)::Int
-    get!(FRAG_ATOM_COUNT_CACHE, frag_smiles) do
-        cleaned_m = get_cleaned_frag_cached(frag_smiles)
-        ismissing(cleaned_m) ? 0 : length(collect(MoleculeFlow.get_atoms(cleaned_m)))
-    end
-end
-
-function get_mol_atom_count_cached(smiles::String)::Int
-    get!(MOL_ATOM_COUNT_CACHE, smiles) do
-        mol = get_mol_cached(smiles)
-        ismissing(mol) ? 0 : length(collect(MoleculeFlow.get_atoms(mol)))
-    end
-end
-
-function get_parsed_molecule_cached(smiles::String)::Molecule
-    get!(PARSED_MOLECULE_CACHE, smiles) do
-        from_SMILES(make_smiles_custom_explicit(make_smiles_rdkit_explicit(smiles)))
-    end
-end
-
-function parse_rxn_cached(rxn_str::SubString{String})::Tuple{
-        Vector{Molecule}, Vector{Molecule}}
-    # Pre-process to convert free hydrogen/oxygen representations to stable molecules
-    # We use lookarounds to ensure we only replace isolated atoms, making an exception
-    # if the bond is already explicit (e.g. [H][H] or [H]-[H] or [O]=[O]).
-    processed_rxn = replace(rxn_str, r"(?<=^|\.|>>)(\[H\])\.(\[H\])(?=$|\.|>>)" => s"\1-\2")
-    processed_rxn = replace(processed_rxn, r"(?<=^|\.|>>)(\[O\])\.(\[O\])(?=$|\.|>>)" =>
-        s"\1=\2")
-
-    # Replace any leftover standalone [H] and [O]
-    processed_rxn = replace(processed_rxn, r"(?<=^|\.|>>)\[H\](?=$|\.|>>)" => "[H]-[H]")
-    processed_rxn = replace(processed_rxn, r"(?<=^|\.|>>)\[O\](?=$|\.|>>)" => "[O]=[O]")
-
-    rxn_parts = split(processed_rxn, ">>")
-    if length(rxn_parts) != 2
-        error("Invalid reaction string: $rxn_str")
-    end
-    reactants_part = strip(rxn_parts[1])
-    products_part = strip(rxn_parts[2])
-
-    reactants_smiles = filter(!isempty, map(strip, split(reactants_part, ".")))
-    products_smiles = filter(!isempty, map(strip, split(products_part, ".")))
-
-    reactants = [get_parsed_molecule_cached(String(s)) for s in reactants_smiles]
-    products = [get_parsed_molecule_cached(String(s)) for s in products_smiles]
-
-    return reactants, products
-end
-
-function parse_syn_problem(reaction_str::AbstractString)::ProblemDefinition
-    parts = split(reaction_str, ",")
-    if length(parts) != 2
-        error("Invalid input format: expected two reaction strings separated by a comma")
-    end
-    incomplete_rxn_str = strip(parts[1])
-    target_rxn_str = strip(parts[2])
-
-    incomplete_reactants, incomplete_products = parse_rxn_cached(incomplete_rxn_str)
-    target_reactants, target_products = parse_rxn_cached(target_rxn_str)
-
-    # Collect unique molecules from the target reaction
-    all_molecules = Molecule[]
-    for m in vcat(target_reactants, target_products)
-        if !(m in all_molecules)
-            push!(all_molecules, m)
-        end
-    end
-
-    # Construct the target reaction with proper stoichiometry
-    reactant_counts = OrderedDict{Molecule, Int}()
-    for m in target_reactants
-        reactant_counts[m] = get(reactant_counts, m, 0) + 1
-    end
-    inputs = [(reactant_counts[m], m) for m in unique(target_reactants)]
-
-    product_counts = OrderedDict{Molecule, Int}()
-    for m in target_products
-        product_counts[m] = get(product_counts, m, 0) + 1
-    end
-    outputs = [(product_counts[m], m) for m in unique(target_products)]
-
-    reaction = CRNSynthesizer.Reaction(nothing, inputs, outputs, false)
-    goal_network = CRNSynthesizer.ReactionNetwork([reaction])
-
-    # Calculate known indices
-    incomplete_molecules = OrderedSet{Molecule}(vcat(incomplete_reactants, incomplete_products))
-    selected_known_indices = Int[]
-    for (i, m) in enumerate(all_molecules)
-        if m in incomplete_molecules
-            push!(selected_known_indices, i)
-        end
-    end
-
-    known_molecules = all_molecules[selected_known_indices]
-    goal_molecules = Molecule[]
-    for i in eachindex(all_molecules)
-        if !(i in selected_known_indices)
-            push!(goal_molecules, all_molecules[i])
-        end
-    end
-
-    atom_valences = get_valences_from_molecules(all_molecules)
-
-    inc_reactant_counts = OrderedDict{Molecule, Int}()
-    for m in incomplete_reactants
-        inc_reactant_counts[m] = get(inc_reactant_counts, m, 0) + 1
-    end
-    partial_inputs = [(inc_reactant_counts[m], m) for m in unique(incomplete_reactants)]
-
-    inc_product_counts = OrderedDict{Molecule, Int}()
-    for m in incomplete_products
-        inc_product_counts[m] = get(inc_product_counts, m, 0) + 1
-    end
-    partial_outputs = [(inc_product_counts[m], m) for m in unique(incomplete_products)]
-
-    partial_reaction = if isempty(partial_inputs) && isempty(partial_outputs)
-        nothing
-    else
-        CRNSynthesizer.Reaction(nothing, partial_inputs, partial_outputs, false)
-    end
-
-    return ProblemDefinition(
-        atom_valences,
-        known_molecules,
-        goal_molecules,
-        goal_network;
-        partial_reaction = partial_reaction
-    )
-end
-
-function is_feasible_problem(problem::ProblemDefinition)::Tuple{
-        Bool, String, Int, Vector{Tuple{String, Int}}}
-    # Decompose all known molecules into BRICS fragments
-    known_frags = Set{String}()
-    for m in problem.known_molecules
-        frags = get_brics_cached(m.canonical_smiles)
-        if !ismissing(frags)
-            for f in frags
-                push!(known_frags, f)
-            end
-        end
-    end
-
-    small_enough_count = 0
-    small_enough_mols = Tuple{String, Int}[]
-    brics_count = 0
-
-    # Check each goal molecule
-    for goal_mol in problem.goal_molecules
-        total_atoms = length(goal_mol.atoms)
-
-        # A missing molecule is feasible if it has size <= 6 
-        # small size due to increased branching factor after introduction of fragments
-        if total_atoms <= 6
-            small_enough_count += 1
-            push!(small_enough_mols, (goal_mol.canonical_smiles, total_atoms))
-            continue
-        end
-
-        # Or if it shares a BRICS fragment (i.e. has a substructure match with any known BRICS fragment)
-        goal_m = get_mol_cached(goal_mol.canonical_smiles)
-        if ismissing(goal_m)
-            return false,
-            "Goal molecule $(goal_mol.canonical_smiles) could not be parsed by MoleculeFlow",
-            0,
-            Tuple{String, Int}[]
-        end
-
-        goal_atom_count = get_mol_atom_count_cached(goal_mol.canonical_smiles)
-
-        shared_any = false
-        for frag_smiles in known_frags
-            # Pre-filter by atom count
-            frag_atom_count = get_frag_atom_count_cached(frag_smiles)
-            if frag_atom_count > goal_atom_count
-                continue
-            end
-
-            cleaned_m = get_cleaned_frag_cached(frag_smiles)
-            if !ismissing(cleaned_m)
-                match_res = MoleculeFlow.has_substructure_match(goal_m, cleaned_m)
-                if !ismissing(match_res) && match_res
-                    shared_any = true
-                    break
-                end
-            end
-        end
-
-        if !shared_any
-            return false,
-            "Goal molecule has > 6 atoms ($total_atoms) and does not share a BRICS fragment",
-            0,
-            Tuple{String, Int}[]
-        end
-        brics_count += 1
-    end
-
-    small_enough_names = [sm for (sm, _) in small_enough_mols]
-    small_enough_str = isempty(small_enough_mols) ? "0" :
-                       "$small_enough_count ($(join(small_enough_names, ", ")))"
-    return true,
-    "$small_enough_str goal molecules are small enough, $brics_count share a BRICS fragment",
-    brics_count,
-    small_enough_mols
-end
-
-function run_problem_synthesis(
-        problem::ProblemDefinition;
-        max_time::Int = 60,
-        metric::Symbol = :none,
-        combine_method::Symbol = :multiplicative,
-        max_stage::Symbol = :networks,
-        use_fragments::Bool = true
-)::Bool
-    fragment_rules = OrderedDict{Int, Vector{Expr}}()
-    starting_fragments = Expr[]
-
-    if use_fragments
-        for m in problem.known_molecules
-            e, s = parse_molecule_to_fragment_rules(m.canonical_smiles)
-            for (k, v) in e
-                if haskey(fragment_rules, k)
-                    append!(fragment_rules[k], v)
-                    unique!(fragment_rules[k])
-                else
-                    fragment_rules[k] = v
-                end
-            end
-            append!(starting_fragments, s)
-        end
-        starting_fragments = unique(starting_fragments)
-    end
-
-    # ---------------------------------------------------------
-    # Atoms -> Molecules
-    # ---------------------------------------------------------
-    molecule_settings = SynthesizerSettings(; max_programs = 5000,
-        max_time = 15, max_depth = 9, goal = problem.goal_molecules, benchmark_type = UntilFound,
-        options = Dict{Symbol, Any}(
-            :unique_candidates => true, :similarity_metric => metric,
-            :similarity_combine => combine_method)
-    )
-
-    molecules = Vector{Molecule}()
-    try
-        molecules = synthesize_molecules(
-            problem.atom_valences; settings = molecule_settings, starting_fragments = starting_fragments,
-            fragment_rules = fragment_rules
-        )
-    catch e
-        println("Molecule synthesis failed with error: ", e)
-        return false
-    end
-
-    println("[Atoms → Molecules] Found $(length(molecules)) molecules.")
-    if issubset(problem.goal_molecules, molecules)
-        println("      \033[32m✓ All goal molecules found.\033[0m")
-    else
-        println("      \033[31m✗ Missing goal molecules.\033[0m")
-        return false
-    end
-
-    # ---------------------------------------------------------
-    # Atoms -> Molecules -> Reactions
-    # ---------------------------------------------------------
-    molecule_settings = SynthesizerSettings(; max_programs = 5000,
-        max_time = 15, max_depth = 9, goal = problem.goal_molecules, benchmark_type = UntilFound,
-        options = Dict{Symbol, Any}(
-            :unique_candidates => true, :similarity_metric => metric,
-            :similarity_combine => combine_method)
-    )
-    reaction_settings = SynthesizerSettings(; max_programs = 30000,
-        max_time = max_time, max_depth = 5, goal = get_reactions(problem.goal_network),
-        benchmark_type = UntilFound,
-        options = Dict{Symbol, Any}(
-            :unique_candidates => true, :similarity_metric => metric,
-            :similarity_combine => combine_method)
-    )
-
-    candidates = Vector{CRNSynthesizer.Reaction}()
-    found_molecules = OrderedSet{Molecule}()
-    try
-        candidates,
-        found_molecules = synthesize_reactions(
-            problem,
-            molecule_settings,
-            reaction_settings;
-            initial_molecules_count = 1000,
-            fragment_rules = fragment_rules,
-            starting_fragments = starting_fragments
-        )
-    catch e
-        println("[Problem → Reactions] Reaction synthesis failed with error: ", e)
-        return false
-    end
-
-    println("[Problem → Reactions] Found $(length(candidates)) reactions, $(length(found_molecules)) molecules.")
-    if issubset(problem.goal_molecules, found_molecules)
-        println("      \033[32m✓ All goal molecules found.\033[0m")
-    else
-        println("      \033[31m✗ Missing goal molecules.\033[0m")
-        return false
-    end
-    if issubset(get_reactions(problem.goal_network), candidates)
-        println("      \033[32m✓ All goal reactions found.\033[0m")
-    else
-        println("      \033[31m✗ Missing goal reactions.\033[0m")
-        return false
-    end
-
-    if max_stage == :reactions
-        return true
-    end
-
-    # ---------------------------------------------------------
-    # Full Pipeline (Atoms -> Molecules -> Reactions -> Networks)
-    # ---------------------------------------------------------
-    pipeline_molecule_settings = SynthesizerSettings(; max_programs = 5000,
-        max_time = 15, max_depth = 9, goal = problem.goal_molecules, benchmark_type = UntilFound,
-        options = Dict{Symbol, Any}(
-            :unique_candidates => true, :similarity_metric => metric,
-            :similarity_combine => combine_method)
-    )
-    pipeline_reaction_settings = SynthesizerSettings(; max_programs = 30000,
-        max_time = max_time, max_depth = 5, goal = get_reactions(problem.goal_network),
-        benchmark_type = UntilFound,
-        options = Dict{Symbol, Any}(
-            :unique_candidates => true, :similarity_metric => metric,
-            :similarity_combine => combine_method)
-    )
-    network_settings = SynthesizerSettings(; max_programs = 5000,
-        max_time = max_time, max_depth = 5, goal = [problem.goal_network], benchmark_type = UntilFound,
-        options = Dict{Symbol, Any}(
-            :unique_candidates => true, :similarity_metric => metric,
-            :similarity_combine => combine_method)
-    )
-
-    networks = Vector{ReactionNetwork}()
-    reactions_found = Vector{CRNSynthesizer.Reaction}()
-    found_molecules = Vector{Molecule}()
-    try
-        (networks,
-            reactions_found,
-            found_molecules) = synthesize_networks(
-            problem,
-            pipeline_molecule_settings,
-            pipeline_reaction_settings,
-            network_settings;
-            initial_molecules_count = 5000,
-            initial_reactions_count = 30000,
-            fragment_rules = fragment_rules,
-            starting_fragments = starting_fragments
-        )
-    catch e
-        println("[Problem → Networks] Network synthesis failed with error: ", e)
-        return false
-    end
-
-    println("[Problem → Networks] Found $(length(networks)) networks, $(length(reactions_found)) reactions, $(length(found_molecules)) molecules.")
-    if issubset([problem.goal_network], networks)
-        println("      \033[32m✓ Target network found.\033[0m")
-    else
-        println("      \033[31m✗ Target network not found.\033[0m")
-    end
-    if issubset(get_reactions(problem.goal_network), reactions_found)
-        println("      \033[32m✓ All goal reactions found in pipeline.\033[0m")
-    else
-        println("      \033[31m✗ Missing goal reactions in pipeline.\033[0m")
-    end
-    if issubset(problem.goal_molecules, found_molecules)
-        println("      \033[32m✓ All goal molecules found in pipeline.\033[0m")
-    else
-        println("      \033[31m✗ Missing goal molecules in pipeline.\033[0m")
-    end
-
-    return issubset([problem.goal_network], networks)
-end
-
-function syn_problem()
-    DEFAULT_SYN_STR = "CC(C)(C)OC(=O)CONC(=O)NCc1cccc2ccccc12>>O=C(O)CONC(=O)NCc1cccc2ccccc12,CC(C)(C)OC(=O)CONC(=O)NCc1cccc2ccccc12.O>>O=C(O)CONC(=O)NCc1cccc2ccccc12.CC(C)(C)O"
-    return parse_syn_problem(DEFAULT_SYN_STR)
-end
-
-const PROBLEMS = [
-    (
-        name = "Water problem with O2 missing",
-        problem = water_problem(;
-            selected_known_indices = [1, 3], selected_expected_indices = [1, 3]
-        )
-    ),
-    (
-        name = "Methane Combustion problem with O2 and CO2 missing",
-        problem = methane_problem(;
-            selected_known_indices = [1, 3], selected_expected_indices = [1, 3]
-        )
-    ),
-    (
-        name = "Ethylene problem with C₂H₄O missing",
-        problem = ethylene_problem(;
-            selected_known_indices = [1, 3], selected_expected_indices = [1, 3]
-        )
-    ),
-    (
-        name = "Estherification problem with H2O, CH2O2 and CH4O missing",
-        problem = estherification_problem(;
-            selected_known_indices = [2, 3, 6], selected_expected_indices = [2, 3, 6]
-        )
-    ),
-    (
-        name = "Example missing molecule problem from SynRXN",
-        problem = syn_problem()
-    )
-]
-
-function run_hardcoded_benchmarks(max_time::Int = 45)
-    println()
-    println("=======================================================")
-    println("Running Hardcoded Problems Feasibility Benchmark")
-    println("=======================================================")
-
-    for (name, problem) in PROBLEMS
-        println("\n-------------------------------------------------------")
-        println("\033[1mBenchmarking problem: $name\033[0m")
-
-        is_feas, reason, _, _ = is_feasible_problem(problem)
-        if is_feas
-            println("  ✓ Feasibility Check: \033[32mFEASIBLE\033[0m ($reason)")
-        else
-            println("  ✗ Feasibility Check: \033[31mINFEASIBLE\033[0m ($reason)")
-        end
-
-        max_stage = endswith(name, "SynRXN") ? :reactions : :networks
-
-        for metric in [:none, :simpson, :tanimoto, :both]
-            println("\n    \033[1mSimilarity Metric: $metric\033[0m")
-
-            fragment_flags = startswith(name, "Estherification") ? [true, false] : [true]
-
-            for use_fragments in fragment_flags
-                frag_str = use_fragments ? "With fragments" : "Without fragments"
-                println("    \033[1m[$frag_str]\033[0m")
-                elapsed = @elapsed success = run_problem_synthesis(
-                    problem; max_time = max_time, metric = metric,
-                    max_stage = max_stage, use_fragments = use_fragments
-                )
-                if success
-                    println("    \033[32m✓ Target reaction network successfully synthesized in $(round(elapsed; digits=2))s!\033[0m")
-                else
-                    println("    \033[31m✗ Synthesis failed or timed out in $(round(elapsed; digits=2))s.\033[0m")
-                end
-            end
-        end
-    end
-    println("=======================================================")
-end
+include("utils.jl")
+include("feasibility_checker.jl")
+include("synthesis_runner.jl")
+include("hardcoded_benchmarks.jl")
 
 # -------------------------------------------------------------
 # Automated SynRXN rbl Benchmark
 # -------------------------------------------------------------
 function run_automated_rbl_benchmark(;
-        dataset::String = "mos", max_time::Int = 15, max_scan::Int = 100, max_synthesis_runs::Int = 5)
-    println()
-    println("=======================================================")
-    println("Running Automated SynRXN rbl/$dataset Feasibility Benchmark")
-    println("=======================================================")
+        dataset::String = "mos", max_scan::Int = 100, max_synthesis_runs::Int = 5)
+    
+    timestamp = Dates.format(Dates.now(), "yyyy-mm-dd_HH-MM-SS")
+    run_dir = joinpath(@__DIR__, "results", timestamp)
+    mkpath(run_dir)
+    
+    log_file = open(joinpath(run_dir, "console.log"), "w")
+    old_stdout = stdout
+    old_stderr = stderr
+    
+    out_rd, out_wr = redirect_stdout()
+    err_rd, err_wr = redirect_stderr()
+    
+    out_task = @async begin
+        while !eof(out_rd)
+            line = readline(out_rd; keep=true)
+            write(old_stdout, line)
+            write(log_file, line)
+            flush(log_file)
+        end
+    end
+    
+    err_task = @async begin
+        while !eof(err_rd)
+            line = readline(err_rd; keep=true)
+            write(old_stderr, line)
+            write(log_file, line)
+            flush(log_file)
+        end
+    end
+    
+    try
+        println()
+        println("=======================================================")
+        println("Running Automated SynRXN rbl/$dataset Feasibility Benchmark")
+        println("=======================================================")
 
     df = SynRXNLoader.load_synrxn_dataset("rbl", dataset)
     total_records = nrow(df)
@@ -527,6 +64,8 @@ function run_automated_rbl_benchmark(;
 
     feasible_problems = Tuple{String, ProblemDefinition}[]
     infeasible_reasons = Dict{String, Int}()
+    feasibility_data = Dict{String, Dict{Symbol, Any}}()
+    first_filter_unfeasible_molecule_sizes = Int[]
 
     feasible_count = 0
     infeasible_count = 0
@@ -545,6 +84,12 @@ function run_automated_rbl_benchmark(;
             println("  \033[31m✗ Missing reaction data for record $r_id\033[0m")
             reason = "Missing reaction data"
             infeasible_reasons[reason] = get(infeasible_reasons, reason, 0) + 1
+            feasibility_data[r_id] = Dict(
+                :is_feasible => false,
+                :reason => reason,
+                :brics_count => 0,
+                :small_mols_count => 0
+            )
             continue
         end
 
@@ -557,10 +102,23 @@ function run_automated_rbl_benchmark(;
             println("  \033[31m✗ Failed to parse reaction for record $r_id: ", e, "\033[0m")
             reason = "Failed to parse reaction"
             infeasible_reasons[reason] = get(infeasible_reasons, reason, 0) + 1
+            feasibility_data[r_id] = Dict(
+                :is_feasible => false,
+                :reason => reason,
+                :brics_count => 0,
+                :small_mols_count => 0
+            )
             continue
         end
         try
-            is_feas, reason, brics_cnt, small_mols = is_feasible_problem(problem)
+            is_feas, reason, brics_cnt, small_mols, unfeasible_sizes = is_feasible_problem(problem)
+
+            feasibility_data[r_id] = Dict(
+                :is_feasible => is_feas,
+                :reason => reason,
+                :brics_count => brics_cnt,
+                :small_mols_count => length(small_mols)
+            )
 
             if is_feas
                 push!(feasible_problems, (r_id, problem))
@@ -577,12 +135,19 @@ function run_automated_rbl_benchmark(;
             else
                 infeasible_count += 1
                 infeasible_reasons[reason] = get(infeasible_reasons, reason, 0) + 1
+                append!(first_filter_unfeasible_molecule_sizes, unfeasible_sizes)
             end
         catch e
             infeasible_count += 1
             println("  \033[31m✗ Failed to decide feasibility for record $r_id: ", e, "\033[0m")
             reason = "Failed to decide feasibility"
             infeasible_reasons[reason] = get(infeasible_reasons, reason, 0) + 1
+            feasibility_data[r_id] = Dict(
+                :is_feasible => false,
+                :reason => reason,
+                :brics_count => 0,
+                :small_mols_count => 0
+            )
         end
     end
 
@@ -604,27 +169,122 @@ function run_automated_rbl_benchmark(;
         println("    - $reason: $count")
     end
 
+    # Data structures to accumulate detailed evaluation results
+    results_df = DataFrame(
+        r_id = String[],
+        similarity_metric = String[],
+        use_fragments = Bool[],
+        success = Bool[],
+        elapsed_time_seconds = Float64[],
+        is_feasible = Bool[],
+        brics_count = Int[],
+        small_mols_count = Int[],
+        feasibility_reason = String[],
+        molecules_synthesized = Int[],
+        reactions_synthesized = Int[]
+    )
+
+    # Dictionary to store second filter stats per use_fragments setting
+    second_filter_stats = Dict{Bool, Dict{Symbol, Any}}()
+
     # Run synthesis evaluation on a subset of feasible problems
     synthesis_eval_limit = min(length(feasible_problems), max_synthesis_runs)
     if synthesis_eval_limit > 0
+        println("\nPerforming JIT warm-up on the first feasible problem...")
+        # Warm-up run to compile necessary functions
+        try
+            run_problem_synthesis(
+                feasible_problems[1][2]; metric = :none,
+                max_stage = :molecules, use_fragments = true
+            )
+            run_problem_synthesis(
+                feasible_problems[1][2]; metric = :both,
+                max_stage = :reactions, use_fragments = true
+            )
+        catch e
+            println("  \033[33m! Warm-up encountered an error (ignoring): ", e, "\033[0m")
+        end
+        println("Warm-up complete.\n")
+
         println("\nEvaluating synthesis (stages molecules -> reactions only) on the first $synthesis_eval_limit feasible problems...")
 
-        for metric in [:none, :simpson, :tanimoto, :both]
-            println("\n  \033[1mSimilarity Metric: $metric\033[0m")
+        for use_fragments in [true, false]
+            frag_str = use_fragments ? "With fragments" : "Without fragments"
+            println("\n    \033[1m[$frag_str]\033[0m")
 
-            for use_fragments in [true, false]
-                frag_str = use_fragments ? "With fragments" : "Without fragments"
-                println("\n    \033[1m[$frag_str]\033[0m")
+            second_filter_successes = Bool[]
+            second_filter_runtimes = Float64[]
+            second_filter_unfeasible_sizes = Int[]
+            second_filter_molecules_synthesized = Int[]
+
+            println("    Running second feasibility filter (Atoms → Molecules)...")
+            filter_results = Dict{String, Tuple{Bool, Float64, Vector{Int}, Int}}()
+            for (i, (r_id, problem)) in enumerate(feasible_problems[1:synthesis_eval_limit])
+                println("      Filtering reaction $r_id ($i/$synthesis_eval_limit)...")
+                elapsed = @elapsed res = run_problem_synthesis(
+                    problem; metric = :none,
+                    max_stage = :molecules, use_fragments = use_fragments
+                )
+                success = res.success
+                filter_results[r_id] = (success, elapsed, res.missing_goal_sizes, res.molecules_count)
+
+                push!(second_filter_successes, success)
+                push!(second_filter_runtimes, elapsed)
+                push!(second_filter_molecules_synthesized, res.molecules_count)
+                if !success
+                    append!(second_filter_unfeasible_sizes, res.missing_goal_sizes)
+                end
+
+                if success
+                    println("        \033[32m✓ Second filter passed in $(round(elapsed; digits=2))s\033[0m")
+                else
+                    println("        \033[31m✗ Second filter failed in $(round(elapsed; digits=2))s\033[0m")
+                end
+            end
+
+            second_filter_stats[use_fragments] = Dict{Symbol, Any}(
+                :successes => second_filter_successes,
+                :runtimes => second_filter_runtimes,
+                :unfeasible_sizes => second_filter_unfeasible_sizes,
+                :molecules_synthesized => second_filter_molecules_synthesized
+            )
+
+            for metric in [:none, :simpson, :tanimoto, :both]
+                println("\n  \033[1mSimilarity Metric: $metric\033[0m")
                 successful_runs = 0
                 total_time = 0.0
 
-                for (i,
-                    (r_id, problem)) in enumerate(feasible_problems[1:synthesis_eval_limit])
+                for (i, (r_id, problem)) in enumerate(feasible_problems[1:synthesis_eval_limit])
+                    success_filter, filter_elapsed, missing_sizes, mol_count = filter_results[r_id]
+
+                    if !success_filter
+                        println("      Evaluating reaction $r_id ($i/$synthesis_eval_limit)...")
+                        println("        \033[31m✗ Skipped reaction synthesis (second feasibility filter failed).\033[0m")
+
+                        # Record detailed run data with failure
+                        feas_details = get(feasibility_data, r_id, Dict(:is_feasible => true, :brics_count => 0, :small_mols_count => 0, :reason => ""))
+                        push!(results_df, (
+                            r_id = r_id,
+                            similarity_metric = string(metric),
+                            use_fragments = use_fragments,
+                            success = false,
+                            elapsed_time_seconds = filter_elapsed,
+                            is_feasible = feas_details[:is_feasible],
+                            brics_count = feas_details[:brics_count],
+                            small_mols_count = feas_details[:small_mols_count],
+                            feasibility_reason = "Atoms -> Molecules feasibility filter failed",
+                            molecules_synthesized = mol_count,
+                            reactions_synthesized = 0
+                        ))
+                        continue
+                    end
+
                     println("      Evaluating reaction $r_id ($i/$synthesis_eval_limit)...")
-                    elapsed = @elapsed success = run_problem_synthesis(
-                        problem; max_time = max_time, metric = metric,
+                    elapsed = @elapsed res = run_problem_synthesis(
+                        problem; metric = metric,
                         max_stage = :reactions, use_fragments = use_fragments
                     )
+                    success = res.success
 
                     if success
                         println("        \033[32m✓ Target reaction successfully synthesized in $(round(elapsed; digits=2))s!\033[0m")
@@ -633,6 +293,22 @@ function run_automated_rbl_benchmark(;
                     else
                         println("        \033[31m✗ Synthesis failed or timed out in $(round(elapsed; digits=2))s.\033[0m")
                     end
+
+                    # Record detailed run data
+                    feas_details = get(feasibility_data, r_id, Dict(:is_feasible => true, :brics_count => 0, :small_mols_count => 0, :reason => ""))
+                    push!(results_df, (
+                        r_id = r_id,
+                        similarity_metric = string(metric),
+                        use_fragments = use_fragments,
+                        success = success,
+                        elapsed_time_seconds = elapsed,
+                        is_feasible = feas_details[:is_feasible],
+                        brics_count = feas_details[:brics_count],
+                        small_mols_count = feas_details[:small_mols_count],
+                        feasibility_reason = feas_details[:reason],
+                        molecules_synthesized = res.molecules_count,
+                        reactions_synthesized = res.reactions_count
+                    ))
                 end
 
                 success_rate = (successful_runs / synthesis_eval_limit) * 100
@@ -644,13 +320,32 @@ function run_automated_rbl_benchmark(;
                 println("        - Average time:   $(round(avg_time; digits=2))s")
             end
         end
+
+        first_filter_stats = Dict{Symbol, Any}(
+            :feasible_count => feasible_count,
+            :infeasible_count => infeasible_count,
+            :unfeasible_molecule_sizes => first_filter_unfeasible_molecule_sizes
+        )
+        save_benchmark_results(run_dir, results_df, dataset, first_filter_stats, second_filter_stats)
     else
         println("\nNo feasible problems found to evaluate.")
     end
 
     println("=======================================================")
+    finally
+        redirect_stdout(old_stdout)
+        redirect_stderr(old_stderr)
+        close(out_wr)
+        close(err_wr)
+        wait(out_task)
+        wait(err_task)
+        close(log_file)
+    end
 end
 
-run_hardcoded_benchmarks()
+#run_hardcoded_benchmarks()
 
-run_automated_rbl_benchmark(; dataset = "mbs", max_scan = 5, max_synthesis_runs = 5)
+run_automated_rbl_benchmark(; dataset = "complex", max_scan = 100, max_synthesis_runs = 10)
+#run_automated_rbl_benchmark(; dataset = "mbs", max_scan = 100, max_synthesis_runs = 10)
+#run_automated_rbl_benchmark(; dataset = "mnc", max_scan = 100, max_synthesis_runs = 10)
+#run_automated_rbl_benchmark(; dataset = "mos", max_scan = 100, max_synthesis_runs = 10)

@@ -10,10 +10,13 @@ function synthesize_molecules(
         starting_fragments = starting_fragments)
     iterator = get_iterator(settings, grammar, starting_element)
 
-    candidates = Vector{Molecule}()
+    candidates = OrderedSet{Molecule}()
     start_time = time()
     for program in iterator
         molecule = interpret_molecule(program, grammar)
+        if haskey(settings.options, :unique_candidates) && settings.options[:unique_candidates] && molecule in candidates
+            continue
+        end
         push!(candidates, molecule)
 
         if check_stop_condition(settings, start_time, candidates, molecule)
@@ -21,9 +24,5 @@ function synthesize_molecules(
         end
     end
 
-    if haskey(settings.options, :unique_candidates) && settings.options[:unique_candidates]
-        candidates = unique(candidates)
-    end
-
-    return candidates
+    return collect(candidates)
 end
