@@ -89,9 +89,6 @@ function reaction_grammar(
         idx = findfirst(r -> r == rule_expr, grammar.rules)
         empty_list_idx = findfirst(r -> r == :(Vector{Molecule}()), grammar.rules)
         if !isnothing(idx)
-            addconstraint!(grammar,
-                Forbidden(RuleNode(idx, [
-                    VarNode(:a), VarNode(:b), VarNode(:a), VarNode(:c)])))
             if !isnothing(empty_list_idx)
                 if isempty(partial_reaction.inputs)
                     addconstraint!(grammar,

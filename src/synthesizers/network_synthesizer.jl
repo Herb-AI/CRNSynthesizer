@@ -101,13 +101,11 @@ function synthesize_networks(
     for molecule_program in molecule_iterator
         molecule = interpret_molecule(molecule_program, molecule_grammar)
 
-        if !(molecule in problem.known_molecules)
-            push!(molecules, molecule)
+        push!(molecules, molecule)
 
-            if !isnothing(pbar)
-                update!(molecule_job)
-                yield()
-            end
+        if !isnothing(pbar)
+            update!(molecule_job)
+            yield()
         end
 
         if length(molecules) < initial_molecules_count &&

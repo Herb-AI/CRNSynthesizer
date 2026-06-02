@@ -42,15 +42,8 @@ function synthesize_reactions(
 )::Vector{Reaction}
     metric_name = get(settings.options, :similarity_metric, :none)
 
-    # If a partial reaction is provided, do not add its known molecules to the set of possible molecules
-    pool_molecules = molecules
-    if !isnothing(partial_reaction)
-        partial_mols = get_reaction_molecules(partial_reaction)
-        pool_molecules = filter(m -> !(m in partial_mols), pool_molecules)
-    end
-
-    sorted_molecules = (isempty(known_molecules) || metric_name == :none) ? pool_molecules :
-                       sort_molecules_by_similarity(pool_molecules, known_molecules; metric_name = metric_name)
+    sorted_molecules = (isempty(known_molecules) || metric_name == :none) ? molecules :
+                       sort_molecules_by_similarity(molecules, known_molecules; metric_name = metric_name)
     grammar = reaction_grammar(sorted_molecules; settings = settings, partial_reaction = partial_reaction)
     iterator = get_iterator(settings, grammar, :reaction)
 
@@ -107,9 +100,7 @@ function synthesize_reactions(
     for molecule_program in molecule_iterator
         molecule = interpret_molecule(molecule_program, molecule_grammar)
 
-        if !(molecule in problem.known_molecules)
-            push!(molecules, molecule)
-        end
+        push!(molecules, molecule)
 
         if length(molecules) < initial_molecules_count &&
            !check_stop_condition(molecule_settings, start_time, molecules, molecule)
