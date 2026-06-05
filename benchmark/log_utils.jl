@@ -36,10 +36,6 @@ function get_package_versions()
     return "synrxn==$synrxn_version"
 end
 
-# -------------------------------------------------------------
-# Plotting Helpers to Maximize Code Reuse
-# -------------------------------------------------------------
-
 function create_pie_plot(labels_raw::Vector{String}, counts::Vector{Int}, title_str::String)
     total = sum(counts)
     if total == 0
@@ -48,7 +44,6 @@ function create_pie_plot(labels_raw::Vector{String}, counts::Vector{Int}, title_
             annotation = (0.5, 0.5, "No data available"))
     end
 
-    # Create pie chart with no legend
     p = pie(labels_raw, counts,
         title = title_str,
         legend = false,
@@ -82,25 +77,9 @@ function make_size_dist_df(sizes::Vector{Int})
     DataFrame(Molecule_Size = [x[1] for x in sorted_pairs], Count = vals, Percentage = pcts)
 end
 
-"""
-    clean_plot_title(title::String) -> String
-
-Remove :none/none references and trailing hyphens from plot titles.
-"""
-function clean_plot_title(title::String)::String
-    t = replace(title, " (:none)" => "")
-    t = replace(t, ":none" => "")
-    t = replace(t, " none" => "")
-    t = replace(t, "none" => "")
-    t = replace(t, r"\s*-\s*\n" => "\n")
-    t = replace(t, r"\s*-\s*$" => "")
-    return t
-end
-
 function plot_success_rate_helper(
         run_dir::String, summary_df::DataFrame, metrics::Vector{String},
-        filename::String, title::String, eval_limit::Int)
-    clean_title = clean_plot_title(title)
+        filename::String, title::String)
 
     if length(metrics) == 1
         m = metrics[1]
@@ -117,7 +96,7 @@ function plot_success_rate_helper(
             [val_without, val_with],
             xlabel = "With and Without Fragments",
             ylabel = "Success Rate (%)",
-            title = clean_title,
+            title = title,
             legend = false,
             ylimits = (0, 105),
             series_annotations = map(
@@ -157,7 +136,7 @@ function plot_success_rate_helper(
             xlabel = "Similarity Guidance Metric",
             ylabel = "Success Rate (%)",
             label = ["Without Fragments" "With Fragments"],
-            title = clean_title,
+            title = title,
             legend = :right,
             ylimits = (0, 105),
             series_annotations = map(
@@ -175,31 +154,28 @@ function plot_success_rate_helper(
     end
 end
 
-function plot_synthesis_time_helper(run_dir::String, succ_rxn_df::DataFrame,
-        metrics::Vector{String}, filename::String, title::String)
-    plot_df = filter(r -> r.similarity_metric in metrics, succ_rxn_df)
-    num_success = length(unique(plot_df.r_id))
-
-    clean_title = clean_plot_title(title)
-    clean_title = replace(clean_title, "\n" => " - $num_success Successful Problems\n")
+function plot_comparison_boxplot_helper(run_dir::String, succ_rxn_df::DataFrame,
+        metrics::Vector{String}, col_name::Symbol, ylabel_str::String, 
+        filename::String, title::String; is_log_scale::Bool=false, val_digits::Int=1, val_suffix::String="")
 
     if length(metrics) == 1
         p = boxplot(
             xticks = (1:2, ["Without Fragments", "With Fragments"]),
             xlims = (0.5, 2.5),
             xlabel = "With and Without Fragments",
-            ylabel = "Synthesis Time (s)",
-            title = clean_title,
+            ylabel = ylabel_str,
+            title = title,
             legend = false,
             size = (600, 450),
             titlefontsize = 9,
             guidefontsize = 9,
-            tickfontsize = 8
+            tickfontsize = 8,
+            yscale = is_log_scale ? :log10 : :identity
         )
 
         vals_without = filter(
             r -> r.similarity_metric == metrics[1] &&
-                 r.use_fragments == false, succ_rxn_df).elapsed_time_seconds
+                 r.use_fragments == false, succ_rxn_df)[!, col_name]
         if !isempty(vals_without)
             boxplot!(p, fill(1, length(vals_without)), vals_without, color = :lightgrey,
                 fillalpha = 0.7, bar_width = 0.6, linecolor = :black)
@@ -207,7 +183,7 @@ function plot_synthesis_time_helper(run_dir::String, succ_rxn_df::DataFrame,
 
         vals_with = filter(
             r -> r.similarity_metric == metrics[1] &&
-                 r.use_fragments == true, succ_rxn_df).elapsed_time_seconds
+                 r.use_fragments == true, succ_rxn_df)[!, col_name]
         if !isempty(vals_with)
             boxplot!(p, fill(2, length(vals_with)), vals_with, color = :dodgerblue,
                 fillalpha = 0.7, bar_width = 0.6, linecolor = :black)
@@ -216,186 +192,91 @@ function plot_synthesis_time_helper(run_dir::String, succ_rxn_df::DataFrame,
         max_val = max(isempty(vals_without) ? 0.0 : maximum(vals_without),
             isempty(vals_with) ? 0.0 : maximum(vals_with))
         max_val = max_val == 0.0 ? 1.0 : max_val
-        boxplot!(p, ylimits = (0, max_val * 1.3))
+        
+        y_max_multiplier = is_log_scale ? 2.5 : 1.3
+        y_min = is_log_scale ? 0.5 : 0
+        boxplot!(p, ylimits = (y_min, max_val * y_max_multiplier))
+        
+        annot_y = is_log_scale ? max_val * 1.5 : max_val * 1.15
 
         annotate!(p,
             1,
-            max_val * 1.15,
+            annot_y,
             isempty(vals_without) ? text("N/A", 8, :center, :bottom) :
-            text("Avg: $(round(mean(vals_without); digits=2))s", 8, :center, :bottom))
+            text("Avg: $(round(mean(vals_without); digits=val_digits))$(val_suffix)", 8, :center, :bottom))
         annotate!(p,
             2,
-            max_val * 1.15,
+            annot_y,
             isempty(vals_with) ? text("N/A", 8, :center, :bottom) :
-            text("Avg: $(round(mean(vals_with); digits=2))s", 8, :center, :bottom))
+            text("Avg: $(round(mean(vals_with); digits=val_digits))$(val_suffix)", 8, :center, :bottom))
         savefig(p, joinpath(run_dir, filename))
     else
         p = boxplot(
             xticks = (1:length(metrics), metrics),
             xlims = (0.5, length(metrics) + 0.5),
             xlabel = "Similarity Guidance Metric",
-            ylabel = "Synthesis Time (s)",
-            title = clean_title,
-            legend = :topright,
-            size = (600, 450),
-            titlefontsize = 9,
-            guidefontsize = 9,
-            tickfontsize = 8,
-            legendfontsize = 8
-        )
-        boxplot!(p, [0], [0], label = "Without Fragments", color = :lightgrey,
-            seriestype = :shape, fillalpha = 0.7, linecolor = :black)
-        boxplot!(p, [0], [0], label = "With Fragments", color = :dodgerblue,
-            seriestype = :shape, fillalpha = 0.7, linecolor = :black)
-
-        max_time_val = 0.0
-        for (i, m) in enumerate(metrics)
-            sub_df_without = filter(
-                r -> r.similarity_metric == m &&
-                     r.use_fragments == false, succ_rxn_df)
-            vals_without = sub_df_without.elapsed_time_seconds
-            if !isempty(vals_without)
-                boxplot!(p, fill(i - 0.22, length(vals_without)),
-                    vals_without, label = "", color = :lightgrey,
-                    fillalpha = 0.7, bar_width = 0.35, linecolor = :black)
-                max_time_val = max(max_time_val, maximum(vals_without))
-            end
-
-            sub_df_with = filter(r -> r.similarity_metric == m && r.use_fragments == true, succ_rxn_df)
-            vals_with = sub_df_with.elapsed_time_seconds
-            if !isempty(vals_with)
-                boxplot!(p, fill(i + 0.22, length(vals_with)), vals_with,
-                    label = "", color = :dodgerblue, fillalpha = 0.7,
-                    bar_width = 0.35, linecolor = :black)
-                max_time_val = max(max_time_val, maximum(vals_with))
-            end
-        end
-
-        max_time_val = max_time_val == 0.0 ? 1.0 : max_time_val
-        boxplot!(p, ylimits = (0, max_time_val * 1.3))
-        savefig(p, joinpath(run_dir, filename))
-    end
-end
-
-function plot_reactions_synthesized_comparison_helper(
-        run_dir::String, succ_rxn_df::DataFrame,
-        metrics::Vector{String}, filename::String, title::String)
-    plot_df = filter(r -> r.similarity_metric in metrics, succ_rxn_df)
-    num_success = length(unique(plot_df.r_id))
-
-    clean_title = clean_plot_title(title)
-    clean_title = replace(clean_title, "\n" => " - $num_success Successful Problems\n")
-
-    if length(metrics) == 1
-        p = boxplot(
-            xticks = (1:2, ["Without Fragments", "With Fragments"]),
-            xlims = (0.5, 2.5),
-            xlabel = "With and Without Fragments",
-            ylabel = "Reactions Synthesized",
-            title = clean_title,
-            legend = false,
-            size = (600, 450),
-            titlefontsize = 9,
-            guidefontsize = 9,
-            tickfontsize = 8,
-            yscale = :log10
-        )
-
-        vals_without = filter(
-            r -> r.similarity_metric == metrics[1] &&
-                 r.use_fragments == false, succ_rxn_df).reactions_synthesized
-        if !isempty(vals_without)
-            boxplot!(p, fill(1, length(vals_without)), vals_without, color = :lightgrey,
-                fillalpha = 0.7, bar_width = 0.6, linecolor = :black)
-        end
-
-        vals_with = filter(
-            r -> r.similarity_metric == metrics[1] &&
-                 r.use_fragments == true, succ_rxn_df).reactions_synthesized
-        if !isempty(vals_with)
-            boxplot!(p, fill(2, length(vals_with)), vals_with, color = :dodgerblue,
-                fillalpha = 0.7, bar_width = 0.6, linecolor = :black)
-        end
-
-        max_val = max(isempty(vals_without) ? 0.0 : maximum(vals_without),
-            isempty(vals_with) ? 0.0 : maximum(vals_with))
-        max_val = max_val == 0.0 ? 1.0 : max_val
-        boxplot!(p, ylimits = (0.5, max_val * 2.5))
-
-        annotate!(p,
-            1,
-            max_val * 1.5,
-            isempty(vals_without) ? text("N/A", 8, :center, :bottom) :
-            text("Avg: $(round(mean(vals_without); digits=1))", 8, :center, :bottom))
-        annotate!(p,
-            2,
-            max_val * 1.5,
-            isempty(vals_with) ? text("N/A", 8, :center, :bottom) :
-            text("Avg: $(round(mean(vals_with); digits=1))", 8, :center, :bottom))
-        savefig(p, joinpath(run_dir, filename))
-    else
-        p = boxplot(
-            xticks = (1:length(metrics), metrics),
-            xlims = (0.5, length(metrics) + 0.5),
-            xlabel = "Similarity Guidance Metric",
-            ylabel = "Reactions Synthesized",
-            title = clean_title,
-            legend = :topright,
+            ylabel = ylabel_str,
+            title = title,
+            legend = :right,
             size = (600, 450),
             titlefontsize = 9,
             guidefontsize = 9,
             tickfontsize = 8,
             legendfontsize = 8,
-            yscale = :log10
+            yscale = is_log_scale ? :log10 : :identity
         )
         boxplot!(p, [0], [0], label = "Without Fragments", color = :lightgrey,
             seriestype = :shape, fillalpha = 0.7, linecolor = :black)
         boxplot!(p, [0], [0], label = "With Fragments", color = :dodgerblue,
             seriestype = :shape, fillalpha = 0.7, linecolor = :black)
 
-        max_rxn_val = 0.0
+        max_val = 0.0
         for (i, m) in enumerate(metrics)
             sub_df_without = filter(
                 r -> r.similarity_metric == m &&
                      r.use_fragments == false, succ_rxn_df)
-            vals_without = sub_df_without.reactions_synthesized
+            vals_without = sub_df_without[!, col_name]
             if !isempty(vals_without)
                 boxplot!(p, fill(i - 0.22, length(vals_without)),
                     vals_without, label = "", color = :lightgrey,
                     fillalpha = 0.7, bar_width = 0.35, linecolor = :black)
-                max_rxn_val = max(max_rxn_val, maximum(vals_without))
+                max_val = max(max_val, maximum(vals_without))
             end
 
             sub_df_with = filter(r -> r.similarity_metric == m && r.use_fragments == true, succ_rxn_df)
-            vals_with = sub_df_with.reactions_synthesized
+            vals_with = sub_df_with[!, col_name]
             if !isempty(vals_with)
                 boxplot!(p, fill(i + 0.22, length(vals_with)), vals_with,
                     label = "", color = :dodgerblue, fillalpha = 0.7,
                     bar_width = 0.35, linecolor = :black)
-                max_rxn_val = max(max_rxn_val, maximum(vals_with))
+                max_val = max(max_val, maximum(vals_with))
             end
         end
 
-        max_rxn_val = max_rxn_val == 0.0 ? 1.0 : max_rxn_val
-        boxplot!(p, ylimits = (0.5, max_rxn_val * 2.5))
+        max_val = max_val == 0.0 ? 1.0 : max_val
+        y_max_multiplier = is_log_scale ? 2.5 : 1.3
+        y_min = is_log_scale ? 0.5 : 0
+        boxplot!(p, ylimits = (y_min, max_val * y_max_multiplier))
+        
+        annot_y = is_log_scale ? max_val * 1.5 : max_val * 1.15
 
         for (i, m) in enumerate(metrics)
             sub_df_without = filter(
                 r -> r.similarity_metric == m &&
                      r.use_fragments == false, succ_rxn_df)
-            vals_without = sub_df_without.reactions_synthesized
+            vals_without = sub_df_without[!, col_name]
             if !isempty(vals_without)
                 annotate!(p,
                     i - 0.22,
-                    max_rxn_val * 1.5,
-                    text("Avg: $(round(mean(vals_without); digits=1))", 7, :center, :bottom))
+                    annot_y,
+                    text("Avg: $(round(mean(vals_without); digits=val_digits))$(val_suffix)", 7, :center, :bottom))
             end
 
             sub_df_with = filter(r -> r.similarity_metric == m && r.use_fragments == true, succ_rxn_df)
-            vals_with = sub_df_with.reactions_synthesized
+            vals_with = sub_df_with[!, col_name]
             if !isempty(vals_with)
-                annotate!(p, i + 0.22, max_rxn_val * 1.5,
-                    text("Avg: $(round(mean(vals_with); digits=1))", 7, :center, :bottom))
+                annotate!(p, i + 0.22, annot_y,
+                    text("Avg: $(round(mean(vals_with); digits=val_digits))$(val_suffix)", 7, :center, :bottom))
             end
         end
 
@@ -579,10 +460,6 @@ function generate_plots(
     comp_df = DataFrame(comp_rows)
     CSV.write(joinpath(run_dir, "missing_molecule_synthesis_untractable_sizes_comparison.csv"), comp_df)
 
-    # Calculate count of successful problems for molecules/reactions
-    num_success_mols = sum(missing_molecule_synthesis_stats[true][:successes] .|
-                           missing_molecule_synthesis_stats[false][:successes])
-
     # 5. Box plot & CSV: Runtime of missing molecule synthesis subproblem
     runtimes_succ_with = missing_molecule_synthesis_stats[true][:runtimes][missing_molecule_synthesis_stats[true][:successes]]
     runtimes_succ_without = missing_molecule_synthesis_stats[false][:runtimes][missing_molecule_synthesis_stats[false][:successes]]
@@ -601,7 +478,7 @@ function generate_plots(
         xlims = (0.5, 2.5),
         xlabel = "With and Without Fragments",
         ylabel = "Runtime (s)",
-        title = "Missing Molecule Synthesis (SynRXN rbl/$dataset) - $num_success_mols Successful Problems\nRuntime of Successful Syntheses",
+        title = "Missing Molecule Synthesis (SynRXN rbl/$dataset)\nRuntime of Successful Molecule Syntheses",
         legend = false,
         size = (600, 450),
         titlefontsize = 9,
@@ -653,7 +530,7 @@ function generate_plots(
         xlims = (0.5, 2.5),
         xlabel = "With and Without Fragments",
         ylabel = "Molecules Synthesized",
-        title = "Missing Molecule Synthesis (SynRXN rbl/$dataset) - $num_success_mols Successful Problems\nNumber of Molecules Synthesized for Successful Problems",
+        title = "Missing Molecule Synthesis (SynRXN rbl/$dataset)\nNumber of Molecules Synthesized until All Targets Found for Successful Problems",
         legend = false,
         size = (600, 450),
         titlefontsize = 9,
@@ -688,135 +565,67 @@ function generate_plots(
     savefig(p_mols, joinpath(run_dir, "average_molecules_synthesized.svg"))
 
     # 7. Box plots & CSV: Reactions synthesized per metric
-    metrics_order = ["none", "simpson", "tanimoto", "both"]
+    metrics_order = ["none", "tanimoto"]
     succ_rxn_df = filter(r -> r.success == true, results_df)
-    num_success_rxns = length(unique(succ_rxn_df.r_id))
 
-    # With fragments
     avg_rxns_with = Float64[]
-    for m in metrics_order
-        sub_df = filter(r -> r.similarity_metric == m && r.use_fragments == true, succ_rxn_df)
-        push!(avg_rxns_with, isempty(sub_df) ? 0.0 : mean(sub_df.reactions_synthesized))
-    end
-    df_rxns_with = DataFrame(
-        Similarity_Metric = metrics_order,
-        Average_Reactions = avg_rxns_with
-    )
-    CSV.write(joinpath(run_dir, "average_reactions_synthesized_with_fragments.csv"), df_rxns_with)
-
-    p_rxns_with = boxplot(
-        xticks = (1:4, metrics_order),
-        xlims = (0.5, 4.5),
-        xlabel = "Similarity Guidance Metric",
-        ylabel = "Reactions Synthesized",
-        title = "Reaction Rebalancing (SynRXN rbl/$dataset) - $num_success_rxns Successful Problems\nNumber of Reactions Synthesized (With Fragments)",
-        legend = false,
-        size = (600, 450),
-        titlefontsize = 9,
-        guidefontsize = 9,
-        tickfontsize = 8,
-        yscale = :log10
-    )
-    max_rxn_with_val = 0.0
-    for (i, m) in enumerate(metrics_order)
-        sub_df = filter(r -> r.similarity_metric == m && r.use_fragments == true, succ_rxn_df)
-        vals = sub_df.reactions_synthesized
-        if !isempty(vals)
-            boxplot!(p_rxns_with, fill(i, length(vals)), vals, color = :dodgerblue,
-                fillalpha = 0.7, bar_width = 0.6, linecolor = :black)
-            max_rxn_with_val = max(max_rxn_with_val, maximum(vals))
-        end
-    end
-    max_rxn_with_val = max_rxn_with_val == 0.0 ? 1.0 : max_rxn_with_val
-    boxplot!(p_rxns_with, ylims = (0.5, max_rxn_with_val * 2.5))
-
-    for (i, m) in enumerate(metrics_order)
-        sub_df = filter(r -> r.similarity_metric == m && r.use_fragments == true, succ_rxn_df)
-        vals = sub_df.reactions_synthesized
-        annot = isempty(vals) ? text("N/A", 8, :center, :bottom) :
-                text("Avg: $(round(mean(vals); digits=1))", 8, :center, :bottom)
-        annotate!(p_rxns_with, i, max_rxn_with_val * 1.5, annot)
-    end
-    savefig(p_rxns_with, joinpath(run_dir, "average_reactions_synthesized_with_fragments.svg"))
-
-    # Without fragments
     avg_rxns_without = Float64[]
     for m in metrics_order
-        sub_df = filter(r -> r.similarity_metric == m && r.use_fragments == false, succ_rxn_df)
-        push!(avg_rxns_without, isempty(sub_df) ? 0.0 : mean(sub_df.reactions_synthesized))
+        sub_df_with = filter(r -> r.similarity_metric == m && r.use_fragments == true, succ_rxn_df)
+        push!(avg_rxns_with, isempty(sub_df_with) ? 0.0 : mean(sub_df_with.reactions_synthesized))
+        
+        sub_df_without = filter(r -> r.similarity_metric == m && r.use_fragments == false, succ_rxn_df)
+        push!(avg_rxns_without, isempty(sub_df_without) ? 0.0 : mean(sub_df_without.reactions_synthesized))
     end
-    df_rxns_without = DataFrame(
+    df_rxns_comp = DataFrame(
         Similarity_Metric = metrics_order,
-        Average_Reactions = avg_rxns_without
+        Average_Reactions_Without_Fragments = avg_rxns_without,
+        Average_Reactions_With_Fragments = avg_rxns_with
     )
-    CSV.write(joinpath(run_dir, "average_reactions_synthesized_without_fragments.csv"), df_rxns_without)
+    CSV.write(joinpath(run_dir, "average_reactions_synthesized.csv"), df_rxns_comp)
 
-    p_rxns_without = boxplot(
-        xticks = (1:4, metrics_order),
-        xlims = (0.5, 4.5),
-        xlabel = "Similarity Guidance Metric",
-        ylabel = "Reactions Synthesized",
-        title = "Reaction Rebalancing (SynRXN rbl/$dataset) - $num_success_rxns Successful Problems\nNumber of Reactions Synthesized (Without Fragments)",
-        legend = false,
-        size = (600, 450),
-        titlefontsize = 9,
-        guidefontsize = 9,
-        tickfontsize = 8,
-        yscale = :log10
+    plot_comparison_boxplot_helper(
+        run_dir, succ_rxn_df, metrics_order, :reactions_synthesized, "Reactions Synthesized",
+        "average_reactions_synthesized.svg",
+        "Reaction Rebalancing (SynRXN rbl/$dataset)\nNumber of Reactions Synthesized Until Target Found for Successful Problems";
+        is_log_scale=true, val_digits=1, val_suffix=""
     )
-    max_rxn_without_val = 0.0
-    for (i, m) in enumerate(metrics_order)
-        sub_df = filter(r -> r.similarity_metric == m && r.use_fragments == false, succ_rxn_df)
-        vals = sub_df.reactions_synthesized
-        if !isempty(vals)
-            boxplot!(p_rxns_without, fill(i, length(vals)), vals, color = :lightgrey,
-                fillalpha = 0.7, bar_width = 0.6, linecolor = :black)
-            max_rxn_without_val = max(max_rxn_without_val, maximum(vals))
-        end
-    end
-    max_rxn_without_val = max_rxn_without_val == 0.0 ? 1.0 : max_rxn_without_val
-    boxplot!(p_rxns_without, ylims = (0.5, max_rxn_without_val * 2.5))
-
-    for (i, m) in enumerate(metrics_order)
-        sub_df = filter(r -> r.similarity_metric == m && r.use_fragments == false, succ_rxn_df)
-        vals = sub_df.reactions_synthesized
-        annot = isempty(vals) ? text("N/A", 8, :center, :bottom) :
-                text("Avg: $(round(mean(vals); digits=1))", 8, :center, :bottom)
-        annotate!(p_rxns_without, i, max_rxn_without_val * 1.5, annot)
-    end
-    savefig(p_rxns_without, joinpath(run_dir, "average_reactions_synthesized_without_fragments.svg"))
 
     # 8. Success Rate Comparison Plots
     # All metrics combined
     plot_success_rate_helper(
         run_dir, summary_df, metrics_order, "synthesis_success_rate.svg",
-        "Reaction Rebalancing (SynRXN rbl/$dataset)\nSuccess Rate ($synthesis_eval_limit Problems Analyzed)",
-        synthesis_eval_limit
+        "Reaction Rebalancing (SynRXN rbl/$dataset)\nSuccess Rate ($synthesis_eval_limit Problems Analyzed)"
     )
     # :none metric only
     plot_success_rate_helper(
         run_dir, summary_df, ["none"], "synthesis_success_rate_none.svg",
-        "Reaction Rebalancing (SynRXN rbl/$dataset)\nSuccess Rate with No Similarity Guidance",
-        synthesis_eval_limit
+        "Reaction Rebalancing (SynRXN rbl/$dataset)\nSuccess Rate ($synthesis_eval_limit Problems Analyzed)"
     )
 
     # 9. Runtime Comparison Plots
     # All metrics combined
-    plot_synthesis_time_helper(
-        run_dir, succ_rxn_df, metrics_order, "synthesis_average_time.svg",
-        "Reaction Rebalancing (SynRXN rbl/$dataset)\nRuntime of Successful Reaction Syntheses"
+    plot_comparison_boxplot_helper(
+        run_dir, succ_rxn_df, metrics_order, :elapsed_time_seconds, "Synthesis Time (s)",
+        "synthesis_average_time.svg",
+        "Reaction Rebalancing (SynRXN rbl/$dataset)\nRuntime of Successful Reaction Syntheses";
+        is_log_scale=false, val_digits=2, val_suffix="s"
     )
     # :none metric only
-    plot_synthesis_time_helper(
-        run_dir, succ_rxn_df, ["none"], "synthesis_average_time_none.svg",
-        "Reaction Rebalancing (SynRXN rbl/$dataset)\nRuntime with No Similarity Guidance"
+    plot_comparison_boxplot_helper(
+        run_dir, succ_rxn_df, ["none"], :elapsed_time_seconds, "Synthesis Time (s)",
+        "synthesis_average_time_none.svg",
+        "Reaction Rebalancing (SynRXN rbl/$dataset)\nRuntime of Successful Reaction Syntheses";
+        is_log_scale=false, val_digits=2, val_suffix="s"
     )
 
     # 10. Reactions Synthesized Comparison Plots
     # :none metric only
-    plot_reactions_synthesized_comparison_helper(
-        run_dir, succ_rxn_df, ["none"], "average_reactions_synthesized_none.svg",
-        "Reaction Rebalancing (SynRXN rbl/$dataset)\nReactions Synthesized with No Similarity Guidance"
+    plot_comparison_boxplot_helper(
+        run_dir, succ_rxn_df, ["none"], :reactions_synthesized, "Reactions Synthesized",
+        "average_reactions_synthesized_none.svg",
+        "Reaction Rebalancing (SynRXN rbl/$dataset)\nNumber of Reactions Synthesized Until Target Found for Successful Problems";
+        is_log_scale=true, val_digits=1, val_suffix=""
     )
 
     # 11. Save corresponding CSV comparison tables

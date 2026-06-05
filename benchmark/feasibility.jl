@@ -181,7 +181,7 @@ function run_automated_rbl_benchmark(;
                     :molecules_synthesized => missing_molecule_synthesis_molecules_synthesized
                 )
 
-                for metric in [:none, :simpson, :tanimoto, :both]
+                for metric in [:none, :tanimoto]
                     println("\n  \033[1mSimilarity Metric: $metric\033[0m")
                     successful_runs = 0
                     total_time = 0.0
