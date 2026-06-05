@@ -171,7 +171,6 @@ function synthesize_networks_2(
 
     reactions = OrderedSet{Reaction}()
     metric_name = get(network_settings.options, :similarity_metric, :simpson)
-    combine_method = get(network_settings.options, :similarity_combine, :multiplicative)
 
     reactions_grammar = reaction_grammar(get_atoms(problem); settings = reaction_settings)
     reaction_iterator = get_iterator(reaction_settings, reactions_grammar, :reaction)
@@ -199,7 +198,7 @@ function synthesize_networks_2(
 
         networks_grammar = network_grammar(
             sort_reactions_by_similarity(collect(reactions), problem.known_molecules;
-                metric_name = metric_name, combine = combine_method,
+                metric_name = metric_name,
                 cache = reaction_score_cache, molecule_cache = molecule_score_cache), problem; settings = network_settings
         )
         network_iterator = get_iterator(network_settings, networks_grammar, :network)
@@ -253,7 +252,6 @@ function synthesize_networks(
 
     molecules = OrderedSet{Molecule}()
     metric_name = get(network_settings.options, :similarity_metric, :none)
-    combine_method = get(network_settings.options, :similarity_combine, :multiplicative)
 
     for molecule in problem.known_molecules
         push!(molecules, molecule)
@@ -317,7 +315,7 @@ function synthesize_networks(
 
             networks_grammar = network_grammar(
                 sort_reactions_by_similarity(collect(reactions), problem.known_molecules;
-                    metric_name = metric_name, combine = combine_method,
+                    metric_name = metric_name,
                     cache = reaction_score_cache, molecule_cache = molecule_score_cache), problem; settings = network_settings
             )
             network_iterator = get_iterator(network_settings, networks_grammar, :network)

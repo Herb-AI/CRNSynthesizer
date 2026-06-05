@@ -89,50 +89,21 @@ function score_reaction_by_similarity(
         reaction::Reaction,
         known_molecules::Vector{Molecule};
         metric::Function = tanimoto_similarity,
-        combine::Symbol = :multiplicative,  # :multiplicative, :additive, :pooled, or :sum
         molecule_cache::Union{Nothing, Dict{Molecule, Float64}} = nothing
 )
-    if combine == :pooled
-        total_score = 0.0
-        for (_, m) in Iterators.flatten((reaction.inputs, reaction.outputs))
-            total_score += get_molecule_similarity_score(
-                m, known_molecules, metric, molecule_cache)
-        end
-        n_total = max(length(reaction.inputs) + length(reaction.outputs), 1)
-        return total_score / n_total
-    end
-
-    input_score = 0.0
-    for (_, m) in reaction.inputs
-        input_score += get_molecule_similarity_score(
+    total_score = 0.0
+    for (_, m) in Iterators.flatten((reaction.inputs, reaction.outputs))
+        total_score += get_molecule_similarity_score(
             m, known_molecules, metric, molecule_cache)
     end
-
-    output_score = 0.0
-    for (_, m) in reaction.outputs
-        output_score += get_molecule_similarity_score(
-            m, known_molecules, metric, molecule_cache)
-    end
-
-    if combine == :multiplicative
-        # Normalize by count to avoid biasing toward reactions with more molecules
-        n_in = max(length(reaction.inputs), 1)
-        n_out = max(length(reaction.outputs), 1)
-        return (input_score / n_in) * (output_score / n_out)
-    elseif combine == :additive
-        n_in = max(length(reaction.inputs), 1)
-        n_out = max(length(reaction.outputs), 1)
-        return (input_score / n_in) + (output_score / n_out)
-    else # :sum
-        return input_score + output_score # The original unnormalized sum
-    end
+    n_total = max(length(reaction.inputs) + length(reaction.outputs), 1)
+    return total_score / n_total
 end
 
 function sort_reactions_by_similarity(
         reactions::Vector{Reaction},
         known_molecules::Vector{Molecule};
         metric_name::Symbol = :simpson,
-        combine::Symbol = :multiplicative,
         cache::Union{Nothing, Dict{Reaction, Float64}} = nothing,
         molecule_cache::Union{Nothing, Dict{Molecule, Float64}} = nothing
 )
@@ -145,7 +116,7 @@ function sort_reactions_by_similarity(
             scores[i] = cache[r]
         else
             score = score_reaction_by_similarity(r, known_molecules; metric = metric,
-                combine = combine, molecule_cache = molecule_cache)
+                molecule_cache = molecule_cache)
             scores[i] = score
             if !isnothing(cache)
                 cache[r] = score

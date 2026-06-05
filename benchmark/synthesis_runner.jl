@@ -9,7 +9,6 @@ Synthesize the molecular network for a problem and report success.
 function run_problem_synthesis(
         problem::ProblemDefinition;
         metric::Symbol = :none,
-        combine_method::Symbol = :multiplicative,
         max_stage::Symbol = :networks,
         use_fragments::Bool = true
 )
@@ -35,11 +34,10 @@ function run_problem_synthesis(
     # ---------------------------------------------------------
     # Atoms -> Molecules
     # ---------------------------------------------------------
-    if max_stage != :reactions
+    if max_stage == :molecules
         molecule_settings = SynthesizerSettings(; max_programs = 250, max_depth = 9, goal = problem.goal_molecules, benchmark_type = UntilFound,
             options = Dict{Symbol, Any}(
-                :unique_candidates => true, :similarity_metric => metric,
-                :similarity_combine => combine_method)
+                :unique_candidates => true, :similarity_metric => metric)
         )
 
         molecules = Vector{Molecule}()
@@ -74,14 +72,12 @@ function run_problem_synthesis(
     if max_stage == :reactions
         molecule_settings = SynthesizerSettings(; max_programs = 250, max_depth = 9,
             options = Dict{Symbol, Any}(
-                :unique_candidates => true, :similarity_metric => metric,
-                :similarity_combine => combine_method)
+                :unique_candidates => true, :similarity_metric => metric)
         )
         reaction_settings = SynthesizerSettings(; max_programs = 30000, max_depth = 5, goal = get_reactions(problem.goal_network),
             benchmark_type = UntilFound,
             options = Dict{Symbol, Any}(
-                :unique_candidates => true, :similarity_metric => metric,
-                :similarity_combine => combine_method)
+                :unique_candidates => true, :similarity_metric => metric)
         )
 
         candidates = Vector{CRNSynthesizer.Reaction}()
@@ -117,36 +113,6 @@ function run_problem_synthesis(
             return (success = false, molecules_count = length(found_molecules), reactions_count = length(candidates), missing_goal_sizes = Int[])
         end
         return (success = true, molecules_count = length(found_molecules), reactions_count = length(candidates), missing_goal_sizes = Int[])
-    else
-        # ---------------------------------------------------------
-        # Molecules -> Reactions
-        # ---------------------------------------------------------
-        reaction_settings = SynthesizerSettings(; max_programs = 30000, max_depth = 5, goal = get_reactions(problem.goal_network),
-            benchmark_type = UntilFound,
-            options = Dict{Symbol, Any}(
-                :unique_candidates => true, :similarity_metric => metric,
-                :similarity_combine => combine_method)
-        )
-        molecules_for_reactions = unique(vcat(problem.known_molecules, molecules))
-        candidates = Vector{CRNSynthesizer.Reaction}()
-        try
-            candidates = synthesize_reactions(
-                molecules_for_reactions,
-                reaction_settings;
-                known_molecules = problem.known_molecules
-            )
-        catch e
-            println("[Molecules → Reactions] Reaction synthesis failed with error: ", e)
-            return (success = false, molecules_count = 0, reactions_count = 0, missing_goal_sizes = Int[])
-        end
-
-        println("[Molecules → Reactions] Found $(length(candidates)) reactions.")
-        if issubset(get_reactions(problem.goal_network), candidates)
-            println("      \033[32m✓ All goal reactions found.\033[0m")
-        else
-            println("      \033[31m✗ Missing goal reactions.\033[0m")
-            return (success = false, molecules_count = length(molecules), reactions_count = length(candidates), missing_goal_sizes = Int[])
-        end
     end
 
     # ---------------------------------------------------------
@@ -154,19 +120,16 @@ function run_problem_synthesis(
     # ---------------------------------------------------------
     pipeline_molecule_settings = SynthesizerSettings(; max_programs = 250, max_depth = 9, goal = problem.goal_molecules, benchmark_type = UntilFound,
         options = Dict{Symbol, Any}(
-            :unique_candidates => true, :similarity_metric => metric,
-            :similarity_combine => combine_method)
+            :unique_candidates => true, :similarity_metric => metric)
     )
     pipeline_reaction_settings = SynthesizerSettings(; max_programs = 30000, max_depth = 5, goal = get_reactions(problem.goal_network),
         benchmark_type = UntilFound,
         options = Dict{Symbol, Any}(
-            :unique_candidates => true, :similarity_metric => metric,
-            :similarity_combine => combine_method)
+            :unique_candidates => true, :similarity_metric => metric)
     )
     network_settings = SynthesizerSettings(; max_programs = 5000, max_depth = 5, goal = [problem.goal_network], benchmark_type = UntilFound,
         options = Dict{Symbol, Any}(
-            :unique_candidates => true, :similarity_metric => metric,
-            :similarity_combine => combine_method)
+            :unique_candidates => true, :similarity_metric => metric)
     )
 
     networks = Vector{ReactionNetwork}()
