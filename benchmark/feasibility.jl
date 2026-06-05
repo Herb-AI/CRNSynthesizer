@@ -266,7 +266,7 @@ end
 
 run_hardcoded_benchmarks()
 
-#run_automated_rbl_benchmark(; dataset = "complex", max_scan = 20, max_synthesis_runs = 10)
-#run_automated_rbl_benchmark(; dataset = "mbs", max_scan = 100, max_synthesis_runs = 10)
-#run_automated_rbl_benchmark(; dataset = "mnc", max_scan = 100, max_synthesis_runs = 10)
-#run_automated_rbl_benchmark(; dataset = "mos", max_scan = 100, max_synthesis_runs = 10)
+run_automated_rbl_benchmark(; dataset = "complex", max_scan = 300, max_synthesis_runs = 200)
+run_automated_rbl_benchmark(; dataset = "mbs", max_scan = 300, max_synthesis_runs = 200)
+run_automated_rbl_benchmark(; dataset = "mnc", max_scan = 300, max_synthesis_runs = 200)
+run_automated_rbl_benchmark(; dataset = "mos", max_scan = 300, max_synthesis_runs = 200)
