@@ -18,7 +18,7 @@ if !isfile(joinpath(run_dir, "benchmark_data.jls"))
     exit(1)
 end
 
-include("utils.jl")
+include("log_utils.jl")
 
 println("Re-generating plots and CSVs for run: $run_dir...")
 generate_plots(run_dir)

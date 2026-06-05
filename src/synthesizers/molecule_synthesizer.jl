@@ -14,7 +14,8 @@ function synthesize_molecules(
     start_time = time()
     for program in iterator
         molecule = interpret_molecule(program, grammar)
-        if haskey(settings.options, :unique_candidates) && settings.options[:unique_candidates] && molecule in candidates
+        if haskey(settings.options, :unique_candidates) &&
+           settings.options[:unique_candidates] && molecule in candidates
             continue
         end
         push!(candidates, molecule)

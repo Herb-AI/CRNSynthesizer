@@ -35,7 +35,8 @@ function run_problem_synthesis(
     # Atoms -> Molecules
     # ---------------------------------------------------------
     if max_stage == :molecules
-        molecule_settings = SynthesizerSettings(; max_programs = 250, max_depth = 9, goal = problem.goal_molecules, benchmark_type = UntilFound,
+        molecule_settings = SynthesizerSettings(; max_programs = 250, max_depth = 9,
+            goal = problem.goal_molecules, benchmark_type = UntilFound,
             options = Dict{Symbol, Any}(
                 :unique_candidates => true, :similarity_metric => metric)
         )
@@ -49,7 +50,11 @@ function run_problem_synthesis(
         catch e
             println("Molecule synthesis failed with error: ", e)
             missing_goal_sizes = [length(m.atoms) for m in problem.goal_molecules]
-            return (success = false, molecules_count = 0, reactions_count = 0, missing_goal_sizes = missing_goal_sizes)
+            return (success = false, molecules_count = 0, reactions_count = 0,
+                missing_goal_sizes = missing_goal_sizes,
+                molecules = CRNSynthesizer.Molecule[],
+                reactions = CRNSynthesizer.Reaction[],
+                networks = CRNSynthesizer.ReactionNetwork[])
         end
 
         println("[Atoms → Molecules] Found $(length(molecules)) molecules.")
@@ -59,10 +64,16 @@ function run_problem_synthesis(
             println("      \033[31m✗ Missing goal molecules.\033[0m")
             missing_mols = setdiff(problem.goal_molecules, molecules)
             missing_goal_sizes = [length(m.atoms) for m in missing_mols]
-            return (success = false, molecules_count = length(molecules), reactions_count = 0, missing_goal_sizes = missing_goal_sizes)
+            return (success = false, molecules_count = length(molecules),
+                reactions_count = 0, missing_goal_sizes = missing_goal_sizes,
+                molecules = molecules, reactions = CRNSynthesizer.Reaction[],
+                networks = CRNSynthesizer.ReactionNetwork[])
         end
         if max_stage == :molecules
-            return (success = true, molecules_count = length(molecules), reactions_count = 0, missing_goal_sizes = Int[])
+            return (success = true, molecules_count = length(molecules),
+                reactions_count = 0, missing_goal_sizes = Int[],
+                molecules = molecules, reactions = CRNSynthesizer.Reaction[],
+                networks = CRNSynthesizer.ReactionNetwork[])
         end
     end
 
@@ -74,7 +85,8 @@ function run_problem_synthesis(
             options = Dict{Symbol, Any}(
                 :unique_candidates => true, :similarity_metric => metric)
         )
-        reaction_settings = SynthesizerSettings(; max_programs = 30000, max_depth = 5, goal = get_reactions(problem.goal_network),
+        reaction_settings = SynthesizerSettings(; max_programs = 30000, max_depth = 5,
+            goal = get_reactions(problem.goal_network),
             benchmark_type = UntilFound,
             options = Dict{Symbol, Any}(
                 :unique_candidates => true, :similarity_metric => metric)
@@ -94,7 +106,10 @@ function run_problem_synthesis(
             )
         catch e
             println("[Problem → Reactions] Reaction synthesis failed with error: ", e)
-            return (success = false, molecules_count = 0, reactions_count = 0, missing_goal_sizes = Int[])
+            return (success = false, molecules_count = 0, reactions_count = 0,
+                missing_goal_sizes = Int[], molecules = CRNSynthesizer.Molecule[],
+                reactions = CRNSynthesizer.Reaction[],
+                networks = CRNSynthesizer.ReactionNetwork[])
         end
 
         println("[Problem → Reactions] Found $(length(candidates)) reactions, $(length(found_molecules)) molecules.")
@@ -104,30 +119,43 @@ function run_problem_synthesis(
             println("      \033[31m✗ Missing goal molecules.\033[0m")
             missing_mols = setdiff(problem.goal_molecules, found_molecules)
             missing_goal_sizes = [length(m.atoms) for m in missing_mols]
-            return (success = false, molecules_count = length(found_molecules), reactions_count = length(candidates), missing_goal_sizes = missing_goal_sizes)
+            return (success = false, molecules_count = length(found_molecules),
+                reactions_count = length(candidates),
+                missing_goal_sizes = missing_goal_sizes,
+                molecules = collect(found_molecules), reactions = candidates,
+                networks = CRNSynthesizer.ReactionNetwork[])
         end
         if issubset(get_reactions(problem.goal_network), candidates)
             println("      \033[32m✓ All goal reactions found.\033[0m")
         else
             println("      \033[31m✗ Missing goal reactions.\033[0m")
-            return (success = false, molecules_count = length(found_molecules), reactions_count = length(candidates), missing_goal_sizes = Int[])
+            return (success = false, molecules_count = length(found_molecules),
+                reactions_count = length(candidates), missing_goal_sizes = Int[],
+                molecules = collect(found_molecules), reactions = candidates,
+                networks = CRNSynthesizer.ReactionNetwork[])
         end
-        return (success = true, molecules_count = length(found_molecules), reactions_count = length(candidates), missing_goal_sizes = Int[])
+        return (success = true, molecules_count = length(found_molecules),
+            reactions_count = length(candidates), missing_goal_sizes = Int[],
+            molecules = collect(found_molecules), reactions = candidates,
+            networks = CRNSynthesizer.ReactionNetwork[])
     end
 
     # ---------------------------------------------------------
     # Full Pipeline (with oracle) (Atoms -> Molecules -> Reactions -> Networks)
     # ---------------------------------------------------------
-    pipeline_molecule_settings = SynthesizerSettings(; max_programs = 250, max_depth = 9, goal = problem.goal_molecules, benchmark_type = UntilFound,
+    pipeline_molecule_settings = SynthesizerSettings(; max_programs = 250, max_depth = 9,
+        goal = problem.goal_molecules, benchmark_type = UntilFound,
         options = Dict{Symbol, Any}(
             :unique_candidates => true, :similarity_metric => metric)
     )
-    pipeline_reaction_settings = SynthesizerSettings(; max_programs = 30000, max_depth = 5, goal = get_reactions(problem.goal_network),
+    pipeline_reaction_settings = SynthesizerSettings(;
+        max_programs = 30000, max_depth = 5, goal = get_reactions(problem.goal_network),
         benchmark_type = UntilFound,
         options = Dict{Symbol, Any}(
             :unique_candidates => true, :similarity_metric => metric)
     )
-    network_settings = SynthesizerSettings(; max_programs = 5000, max_depth = 5, goal = [problem.goal_network], benchmark_type = UntilFound,
+    network_settings = SynthesizerSettings(; max_programs = 5000, max_depth = 5,
+        goal = [problem.goal_network], benchmark_type = UntilFound,
         options = Dict{Symbol, Any}(
             :unique_candidates => true, :similarity_metric => metric)
     )
@@ -150,7 +178,10 @@ function run_problem_synthesis(
         )
     catch e
         println("[Problem → Networks] Network synthesis failed with error: ", e)
-        return (success = false, molecules_count = length(found_molecules), reactions_count = 0, missing_goal_sizes = Int[])
+        return (success = false, molecules_count = length(found_molecules),
+            reactions_count = 0, missing_goal_sizes = Int[],
+            molecules = found_molecules, reactions = CRNSynthesizer.Reaction[],
+            networks = CRNSynthesizer.ReactionNetwork[])
     end
 
     println("[Problem → Networks] Found $(length(networks)) networks, $(length(reactions_found)) reactions, $(length(found_molecules)) molecules.")
@@ -170,5 +201,8 @@ function run_problem_synthesis(
         println("      \033[31m✗ Missing goal molecules in pipeline.\033[0m")
     end
 
-    return (success = issubset([problem.goal_network], networks), molecules_count = length(found_molecules), reactions_count = length(reactions_found), missing_goal_sizes = Int[])
+    return (success = issubset([problem.goal_network], networks),
+        molecules_count = length(found_molecules),
+        reactions_count = length(reactions_found), missing_goal_sizes = Int[],
+        molecules = found_molecules, reactions = reactions_found, networks = networks)
 end

@@ -366,7 +366,8 @@ function get_possibilities(
     union!(all_keys, keys(prefilled_atoms))
 
     sorted_atoms = sort(collect(all_keys))
-    atom_indices = OrderedDict{String, Int}(atom => i for (i, atom) in enumerate(sorted_atoms))
+    atom_indices = OrderedDict{String, Int}(atom => i
+    for (i, atom) in enumerate(sorted_atoms))
     n_atoms = max(length(sorted_atoms), 1)
 
     # Initialize with prefilled atom counts
