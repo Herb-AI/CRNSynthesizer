@@ -92,9 +92,9 @@ function plot_success_rate_helper(
         count_without = isempty(row_without) ? 0 : row_without[1, :successful_runs]
 
         p = bar(
-            ["Without Fragments", "With Fragments"],
+            ["base grammar", "with BRICS fragments"],
             [val_without, val_with],
-            xlabel = "With and Without Fragments",
+            xlabel = "BRICS fragments usage",
             ylabel = "Success Rate (%)",
             title = title,
             legend = false,
@@ -132,10 +132,11 @@ function plot_success_rate_helper(
 
         success_matrix = hcat(success_without_metric, success_with_metric)
         success_counts_matrix = hcat(success_counts_without, success_counts_with)
-        p = groupedbar(metrics, success_matrix,
+        display_metrics = map(m -> m == "tanimoto" ? "Tanimoto using Morgan2 with size 1024" : m, metrics)
+        p = groupedbar(display_metrics, success_matrix,
             xlabel = "Similarity Guidance Metric",
             ylabel = "Success Rate (%)",
-            label = ["Without Fragments" "With Fragments"],
+            label = ["base grammar" "with BRICS fragments"],
             title = title,
             legend = :right,
             ylimits = (0, 105),
@@ -160,9 +161,9 @@ function plot_comparison_boxplot_helper(run_dir::String, succ_rxn_df::DataFrame,
 
     if length(metrics) == 1
         p = boxplot(
-            xticks = (1:2, ["Without Fragments", "With Fragments"]),
+            xticks = (1:2, ["base grammar", "with BRICS fragments"]),
             xlims = (0.5, 2.5),
-            xlabel = "With and Without Fragments",
+            xlabel = "BRICS fragments usage",
             ylabel = ylabel_str,
             title = title,
             legend = false,
@@ -211,8 +212,9 @@ function plot_comparison_boxplot_helper(run_dir::String, succ_rxn_df::DataFrame,
             text("Avg: $(round(mean(vals_with); digits=val_digits))$(val_suffix)", 8, :center, :bottom))
         savefig(p, joinpath(run_dir, filename))
     else
+        display_metrics = map(m -> m == "tanimoto" ? "Tanimoto using Morgan2 with size 1024" : m, metrics)
         p = boxplot(
-            xticks = (1:length(metrics), metrics),
+            xticks = (1:length(display_metrics), display_metrics),
             xlims = (0.5, length(metrics) + 0.5),
             xlabel = "Similarity Guidance Metric",
             ylabel = ylabel_str,
@@ -225,9 +227,9 @@ function plot_comparison_boxplot_helper(run_dir::String, succ_rxn_df::DataFrame,
             legendfontsize = 8,
             yscale = is_log_scale ? :log10 : :identity
         )
-        boxplot!(p, [0], [0], label = "Without Fragments", color = :lightgrey,
+        boxplot!(p, [0], [0], label = "base grammar", color = :lightgrey,
             seriestype = :shape, fillalpha = 0.7, linecolor = :black)
-        boxplot!(p, [0], [0], label = "With Fragments", color = :dodgerblue,
+        boxplot!(p, [0], [0], label = "with BRICS fragments", color = :dodgerblue,
             seriestype = :shape, fillalpha = 0.7, linecolor = :black)
 
         max_val = 0.0
@@ -372,16 +374,16 @@ function generate_plots(
     succ_count_without = sum(missing_molecule_synthesis_stats[false][:successes])
 
     success_rate_df = DataFrame(
-        Use_Fragments = ["Without Fragments", "With Fragments"],
+        Use_Fragments = ["base grammar", "with BRICS fragments"],
         Success_Rate_Percentage = [success_without, success_with],
         Successful_Problems = [succ_count_without, succ_count_with]
     )
     CSV.write(joinpath(run_dir, "missing_molecule_synthesis_success_rate.csv"), success_rate_df)
 
     p_success_rate = bar(
-        ["Without Fragments", "With Fragments"],
+        ["base grammar", "with BRICS fragments"],
         [success_without, success_with],
-        xlabel = "With and Without Fragments",
+        xlabel = "BRICS fragments usage",
         ylabel = "Success Rate (%)",
         title = "Missing Molecule Synthesis (SynRXN rbl/$dataset)\nSuccess Rate ($synthesis_eval_limit Problems Analyzed)",
         legend = false,
@@ -411,7 +413,7 @@ function generate_plots(
     p_sizes_with = create_pie_plot(
         sizes_with_lbls,
         sizes_with_vals,
-        "Missing Molecule Synthesis (SynRXN rbl/$dataset) - $failed_with_count Problems Failed\nUnsynthesized Molecule Sizes (With Fragments)"
+        "Missing Molecule Synthesis (SynRXN rbl/$dataset) - $failed_with_count Problems Failed\nUnsynthesized Molecule Sizes (with BRICS fragments)"
     )
     savefig(p_sizes_with,
         joinpath(run_dir, "missing_molecule_synthesis_untractable_sizes_with_fragments.svg"))
@@ -427,7 +429,7 @@ function generate_plots(
     p_sizes_without = create_pie_plot(
         sizes_without_lbls,
         sizes_without_vals,
-        "Missing Molecule Synthesis (SynRXN rbl/$dataset) - $failed_without_count Problems Failed\nUnsynthesized Molecule Sizes (Without Fragments)"
+        "Missing Molecule Synthesis (SynRXN rbl/$dataset) - $failed_without_count Problems Failed\nUnsynthesized Molecule Sizes (base grammar)"
     )
     savefig(p_sizes_without,
         joinpath(run_dir, "missing_molecule_synthesis_untractable_sizes_without_fragments.svg"))
@@ -468,15 +470,15 @@ function generate_plots(
     runtime_without = isempty(runtimes_succ_without) ? 0.0 : mean(runtimes_succ_without)
 
     runtime_df = DataFrame(
-        Use_Fragments = ["Without Fragments", "With Fragments"],
+        Use_Fragments = ["base grammar", "with BRICS fragments"],
         Average_Runtime_Seconds = [runtime_without, runtime_with]
     )
     CSV.write(joinpath(run_dir, "missing_molecule_synthesis_average_runtime.csv"), runtime_df)
 
     p_runtime = boxplot(
-        xticks = (1:2, ["Without Fragments", "With Fragments"]),
+        xticks = (1:2, ["base grammar", "with BRICS fragments"]),
         xlims = (0.5, 2.5),
-        xlabel = "With and Without Fragments",
+        xlabel = "BRICS fragments usage",
         ylabel = "Runtime (s)",
         title = "Missing Molecule Synthesis (SynRXN rbl/$dataset)\nRuntime of Successful Molecule Syntheses",
         legend = false,
@@ -520,15 +522,15 @@ function generate_plots(
     avg_mols_without = isempty(mols_succ_without) ? 0.0 : mean(mols_succ_without)
 
     mols_df = DataFrame(
-        Use_Fragments = ["Without Fragments", "With Fragments"],
+        Use_Fragments = ["base grammar", "with BRICS fragments"],
         Average_Molecules = [avg_mols_without, avg_mols_with]
     )
     CSV.write(joinpath(run_dir, "average_molecules_synthesized.csv"), mols_df)
 
     p_mols = boxplot(
-        xticks = (1:2, ["Without Fragments", "With Fragments"]),
+        xticks = (1:2, ["base grammar", "with BRICS fragments"]),
         xlims = (0.5, 2.5),
-        xlabel = "With and Without Fragments",
+        xlabel = "BRICS fragments usage",
         ylabel = "Molecules Synthesized",
         title = "Missing Molecule Synthesis (SynRXN rbl/$dataset)\nNumber of Molecules Synthesized until All Targets Found for Successful Problems",
         legend = false,
@@ -680,7 +682,7 @@ function generate_plots(
     none_rxns_without = filter(r -> r.use_fragments == false, succ_rxn_none)
 
     none_comp_df = DataFrame(
-        Fragments_Setting = ["Without Fragments", "With Fragments"],
+        Fragments_Setting = ["base grammar", "with BRICS fragments"],
         Success_Rate_Percentage = [
             isempty(none_row_without) ? 0.0 : none_row_without[1, :success_rate],
             isempty(none_row_with) ? 0.0 : none_row_with[1, :success_rate]
