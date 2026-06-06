@@ -185,47 +185,6 @@ function HerbConstraints.propagate!(solver::Solver, constraint::localUniformRing
     # println("Filled pairs: ", filled_atom_pairs)
 end
 
-function is_single_atom(smiles::String)::Bool
-    depth = 0
-    found_top_level = false
-    for c in smiles
-        if c == '('
-            depth += 1
-        elseif c == ')'
-            depth -= 1
-        elseif c == ']' && depth == 0
-            found_top_level && return false
-            found_top_level = true
-        end
-    end
-    return true
-end
-
-function postprocess_grouped_fragment_connection_points(
-        solver::UniformSolver, path::Vector{Int},
-        forbidden_group::Vector{Vector{Int}}, connects_to_single_atom::Bool,
-        all_ringbonds::Vector{Tuple{Vector{Int}, Vector{Int}}},
-        all_forbidden::Vector{Vector{Vector{Int}}},
-        atom_ringbonds::Vector{Tuple{Vector{Int}, Vector{Int}}},
-        branch_children::Vector{Int})::Vector{Vector{Int}}
-    forbidden_for_branches = [x[1] for x in atom_ringbonds]
-    atom_forbidden = connects_to_single_atom ?
-                     vcat(forbidden_group, forbidden_for_branches) :
-                     forbidden_for_branches
-    push!(all_forbidden, atom_forbidden)
-    append!(all_ringbonds, atom_ringbonds)
-    for child_id in branch_children
-        branch_ringbonds, branch_forbidden,
-        _ = get_ringbond_paths(
-            solver,
-            push!(copy(path), child_id),
-            forbidden_group = forbidden_for_branches
-        )
-        append!(all_ringbonds, branch_ringbonds)
-        append!(all_forbidden, branch_forbidden)
-    end
-    return forbidden_for_branches
-end
 
 function get_ringbond_paths(
         solver::UniformSolver,
@@ -384,7 +343,6 @@ function get_ringbond_paths(
                 return all_ringbonds, all_forbidden, []
             end
             rule = solver.grammar.rules[HerbCore.get_rule(node)]
-            connects_to_single_atom = false
             all_ringbonds = Vector{Tuple{Vector{Int}, Vector{Int}}}()
             all_forbidden = Vector{Vector{Vector{Int}}}()
             atom_ringbonds = Vector{Tuple{Vector{Int}, Vector{Int}}}()
@@ -397,18 +355,65 @@ function get_ringbond_paths(
             digit_to_virtual_atom = OrderedDict{Int, Int}()
             matching_pairs = Vector{Tuple{Int, Int}}()
 
+            atom_id_counter = 0
+            current_atom_id = 0
+            stack_atom_id = Vector{Int}()
+            atom_holes = Dict{Int, Vector{Vector{Int}}}()
+            parent_atom = Dict{Int, Int}()
+            atom_holes[0] = forbidden_group
+
             args = rule isa Expr ? rule.args[2:end] : [rule]
             for arg in args
-                if arg isa String
-                    if virtual_atom_count > 0
+                if arg isa String # Parse chunk
+                    if virtual_atom_count > 0 # Ringbonds and children can only be postprocessed
                         push!(saved_atom_ringbonds, copy(atom_ringbonds))
-                        forbidden_group = postprocess_grouped_fragment_connection_points(
-                            solver, path, forbidden_group, connects_to_single_atom,
-                            all_ringbonds, all_forbidden, atom_ringbonds, branch_children)
+                        
+                        chunk_last_atom = current_atom_id # Get id of the last atom in the previous chunk
+                        parent_id = get(parent_atom, chunk_last_atom, 0) # Get its parent id
+                        if parent_id == 0 # If it has no parent, forbid the forbidden group from get_ringbond_paths argument
+                            chunk_fg = forbidden_group
+                        else # Otherwise, forbid the ringbonds from the parent chunk, if applicable
+                            chunk_fg = get(atom_holes, parent_id, Vector{Vector{Int}}())
+                        end
+                        
+                        # Save the ringbonds from this chunk as holes for its children chunks
+                        atom_holes[chunk_last_atom] = [x[1] for x in atom_ringbonds]
+                        # Forbid its connected ringbonds and its parent's connected ringbonds to connect with each other
+                        atom_forbidden = vcat(chunk_fg, atom_holes[chunk_last_atom])
+                        if !isempty(atom_forbidden)
+                            push!(all_forbidden, atom_forbidden)
+                        end
+                        append!(all_ringbonds, atom_ringbonds)
+                        
+                        # Recurse into children of this chunk
+                        for child_id in branch_children
+                            branch_ringbonds, branch_forbidden,
+                            _ = get_ringbond_paths(
+                                solver,
+                                push!(copy(path), child_id),
+                                forbidden_group = atom_holes[chunk_last_atom] # Forbid the child chunk's ringbonds to connect with the current chunk's ringbonds
+                            )
+                            append!(all_ringbonds, branch_ringbonds)
+                            append!(all_forbidden, branch_forbidden)
+                        end
+                        # Clear the ringbonds and branch children for the next chunk
                         atom_ringbonds = Vector{Tuple{Vector{Int}, Vector{Int}}}()
                         branch_children = Vector{Int}()
                     end
-                    connects_to_single_atom = is_single_atom(arg)
+                    
+                    # Keep track of all the atoms and their direct connections
+                    for c in arg
+                        if c == '(' # Save the last atom id in case it was a chunk_last_atom and there are going to be nested children on deeper levels
+                            push!(stack_atom_id, current_atom_id)
+                        elseif c == ')' # Restore the last atom id to keep track of the parent atom
+                            current_atom_id = pop!(stack_atom_id)
+                        elseif c == ']'
+                            atom_id_counter += 1 # ']' marks the end of an atom
+                            parent_atom[atom_id_counter] = current_atom_id # Save the actual parent atom
+                            current_atom_id = atom_id_counter
+                        end
+                    end
+                    
                     virtual_atom_count += 1
 
                     # Parse trailing ringbonds
@@ -424,7 +429,7 @@ function get_ringbond_paths(
                             digit_to_virtual_atom[digit_val] = virtual_atom_count
                         end
                     end
-                else
+                else # Parse children of type fragment_X_exit
                     children_count += 1
                     child_node = get_node_at_location(
                         solver, push!(copy(path), children_count))
@@ -448,19 +453,46 @@ function get_ringbond_paths(
                 push!(saved_atom_ringbonds, copy(atom_ringbonds))
             end
 
+            # We can only postprocess the ringbonds after parsing all of the chunk's children
+            # In case there is no trailing chunk in the fragment, we still need to posprocess the ringbonds and children
             if !isempty(atom_ringbonds) || !isempty(branch_children)
-                postprocess_grouped_fragment_connection_points(
-                    solver, path, forbidden_group, connects_to_single_atom,
-                    all_ringbonds, all_forbidden, atom_ringbonds, branch_children)
+                chunk_last_atom = current_atom_id # Get id of the last atom in the previous chunk
+                parent_id = get(parent_atom, chunk_last_atom, 0) # Get its parent id
+                if parent_id == 0 # If it has no parent, forbid the forbidden group from get_ringbond_paths argument
+                    chunk_fg = forbidden_group
+                else # Otherwise, forbid the ringbonds from the parent chunk, if applicable
+                    chunk_fg = get(atom_holes, parent_id, Vector{Vector{Int}}())
+                end
+                
+                # Save the ringbonds from this chunk as holes for its children chunks
+                atom_holes[chunk_last_atom] = [x[1] for x in atom_ringbonds]
+                # Forbid its connected ringbonds and its parent's connected ringbonds to connect with each other
+                atom_forbidden = vcat(chunk_fg, atom_holes[chunk_last_atom])
+                if !isempty(atom_forbidden)
+                    push!(all_forbidden, atom_forbidden)
+                end
+                append!(all_ringbonds, atom_ringbonds)
+                
+                # Recurse into children of this chunk
+                for child_id in branch_children
+                    branch_ringbonds, branch_forbidden,
+                    _ = get_ringbond_paths(
+                        solver,
+                        push!(copy(path), child_id),
+                        forbidden_group = atom_holes[chunk_last_atom] # Forbid the child chunk's ringbonds to connect with the current chunk's ringbonds
+                    )
+                    append!(all_ringbonds, branch_ringbonds)
+                    append!(all_forbidden, branch_forbidden)
+                end
             end
 
-            # Generate forbidden groups for matching pairs
+            # Generate forbidden groups for matching pairs to avoid duplicate ringbonds between the same two atoms
             for (prev_v_atom, curr_v_atom) in matching_pairs
-                forbidden_group = [x[1]
+                forbidden_group_pairs = [x[1]
                                    for x in vcat(
                     saved_atom_ringbonds[prev_v_atom], saved_atom_ringbonds[curr_v_atom])]
-                if !isempty(forbidden_group)
-                    push!(all_forbidden, forbidden_group)
+                if !isempty(forbidden_group_pairs)
+                    push!(all_forbidden, forbidden_group_pairs)
                 end
             end
 

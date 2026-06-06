@@ -17,7 +17,25 @@
     #println("Starting fragments: ", starting_fragments)
 
     settings = SynthesizerSettings(
-        max_depth = 4, options = Dict{Symbol, Any}(:unique_candidates => true))
+        max_depth = 6, options = Dict{Symbol, Any}(:unique_candidates => true))
+    fragment_molecules = synthesize_molecules(
+        atom_valences; settings = settings, fragment_rules = entry_fragments,
+        starting_fragments = starting_fragments)
+    @test length(fragment_molecules) > 0
+    @test length(fragment_molecules) > length(unique_molecules)
+    #println(fragment_molecules)
+    #println("Number of unique fragment-based molecules synthesized: ",
+    #length(fragment_molecules))
+
+
+    target_molecule = "C=CC(c1ccccc1)C(C(=O)c1ccc([N+](=O)[O-])cc1)N(C)C"
+    # println("Target molecule: ", target_molecule)
+    entry_fragments, starting_fragments = parse_molecule_to_fragment_rules(target_molecule)
+    #println("Fragment rules: ", entry_fragments)
+    #println("Starting fragments: ", starting_fragments)
+
+    settings = SynthesizerSettings(
+        max_depth = 6, options = Dict{Symbol, Any}(:unique_candidates => true))
     fragment_molecules = synthesize_molecules(
         atom_valences; settings = settings, fragment_rules = entry_fragments,
         starting_fragments = starting_fragments)

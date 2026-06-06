@@ -100,10 +100,5 @@ end
         molecule = from_SMILES(smiles)
         smiles2 = to_SMILES(molecule)
         @test smiles == smiles2
-
-        smiles = "[H](-[N]-[N](-[O]-[O]-2)-[O]-1)-[O]-[N](-[H])-[N]-1-[O]-2"
-        molecule = from_SMILES(smiles)
-        smiles2 = to_SMILES(molecule)
-        @test smiles == smiles2
     end
 end

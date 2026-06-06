@@ -332,7 +332,7 @@ function from_SMILES(smiles::String)
 
     mol = RDKitMinimalLib.get_mol(replace(smiles, "≡" => "#"))
     if isnothing(mol)
-        @error "Invalid molecule: $smiles"
+        throw(ArgumentError("Invalid molecule: $smiles"))
     end
     canonical_smiles = isnothing(mol) ? smiles : RDKitMinimalLib.get_smiles(mol)
     fingerprint = isnothing(mol) ? UInt8[] : RDKitMinimalLib.get_rdkit_fp_as_bytes(mol)
