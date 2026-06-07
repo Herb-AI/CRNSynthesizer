@@ -92,6 +92,7 @@ function base_grammar(atoms::Vector{String})
         # This rule makes it so expansion of fragment_X_exit into fragment_X_entry
         # does not have uniform shape with expansion into a ringbond digit
         special_bond = "-"
+        special_double_bond = "="
 
         fragment_1_exit = "(-" * chain * ")"
         fragment_1_exit = "-" * digit
@@ -103,8 +104,8 @@ function base_grammar(atoms::Vector{String})
         fragment_5_exit = "-" * digit
         fragment_6_exit = "(-" * chain * ")"
         fragment_6_exit = "-" * digit
-        fragment_7_exit = "(-" * chain * ")"
-        fragment_7_exit = "-" * digit
+        fragment_7_exit = "(=" * chain * ")"
+        fragment_7_exit = "=" * digit
         fragment_8_exit = "(-" * chain * ")"
         fragment_8_exit = "-" * digit
         fragment_9_exit = "(-" * chain * ")"
@@ -216,8 +217,8 @@ function fragment_X_grammar(id::Int, fragment_rules::Vector{Expr})
 
         7 => begin
             grammar = @csgrammar begin
-                chain = structure * "-" * fragment_7_entry
-                fragment_7_exit = "(" * special_bond * fragment_7_entry * ")"
+                chain = structure * "=" * fragment_7_entry
+                fragment_7_exit = "(" * special_double_bond * fragment_7_entry * ")"
             end
             foreach(rule -> add_rule!(grammar, rule), fragment_rules)
             return grammar

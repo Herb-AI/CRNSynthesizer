@@ -121,9 +121,19 @@ function make_fragment_custom_explicit(smiles::String)::Tuple{Int, Expr, Expr}
     return (parse(Int, entry_digit), Meta.parse(entry_rule), Meta.parse(starting_rule))
 end
 
+# RDKit represents connections for all dummy atoms as single bonds
+# However, the L7 BRICS environment has a fixed double bond
+function make_seventh_brics_double_bond_explicit(smiles::String)::String
+    s = replace(smiles, r"(?<=[A-Za-z\](])\[7\*\]|-\[7\*\]" => "=[7*]")
+    s = replace(s, r"^\[7\*\](?:-|(?=[A-Za-z]))" => "[7*]=")
+    
+    return s
+end
+
 function make_smiles_rdkit_explicit(smiles::String)::String
+    fixed_smiles = make_seventh_brics_double_bond_explicit(smiles)
     return MoleculeFlow.mol_to_smiles(
-        MoleculeFlow.add_hs(MoleculeFlow.mol_from_smiles(smiles));
+        MoleculeFlow.add_hs(MoleculeFlow.mol_from_smiles(fixed_smiles));
         kekule_smiles = true, all_bonds_explicit = true)
 end
 

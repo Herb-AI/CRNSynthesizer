@@ -141,10 +141,10 @@ function propagate_atoms!(
             return
         elseif endswith(string(type), "_exit")
             rule = solver.grammar.rules[rule]
-            if rule == :("(-" * chain * ")")
+            if rule == :("(-" * chain * ")") || rule == :("(=" * chain * ")")
                 propagate_atoms!(
                     solver, constraint, push!(copy(path), 1), bond_paths = [copy(path)])
-            elseif :special_bond in rule.args
+            elseif :special_bond in rule.args || :special_double_bond in rule.args
                 propagate_atoms!(solver, constraint, push!(copy(path), 2))
             end
             return
@@ -211,6 +211,15 @@ function propagate_atoms!(
             end
 
             :(structure * "-" * $fragment_X_entry) => begin
+                bond_paths = push!(copy(bond_paths), push!(copy(path), 2))
+                propagate_atoms!(
+                    solver, constraint, push!(copy(path), 1),
+                    bond_paths = bond_paths, holes = holes
+                )
+                propagate_atoms!(solver, constraint, push!(copy(path), 2))
+            end
+
+            :(structure * "=" * $fragment_X_entry) => begin
                 bond_paths = push!(copy(bond_paths), push!(copy(path), 2))
                 propagate_atoms!(
                     solver, constraint, push!(copy(path), 1),

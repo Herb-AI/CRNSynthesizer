@@ -111,6 +111,8 @@ function generate_atom_bond_dicts(grammar, atom_valences::OrderedDict{String, In
                     break
                 end
             end
+        elseif startswith(string(grammar.types[i]), "fragment_7")
+            bond_dict[i] = 2
         elseif startswith(string(grammar.types[i]), "fragment_")
             bond_dict[i] = 1
         end

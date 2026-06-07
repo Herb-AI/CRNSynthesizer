@@ -118,6 +118,10 @@ function HerbConstraints.propagate!(solver::Solver, constraint::localUniformRing
             right_rules = get_ringbond_bond_info(
                 solver, constraint.grammar_data, pair[2])
 
+            if isempty(intersect(left_rules, right_rules))
+                HerbConstraints.set_infeasible!(solver)
+            end
+
             # Make their domains equal (only if the path wasn't mocked)
             if left_path != pair[1]
                 c_remove_all_but!(solver, left_path, right_rules, false)
@@ -248,6 +252,22 @@ function get_ringbond_paths(
                     return ringbonds_paths, [forbidden_group], ringbonds_group
                 end
                 :(structure * "-" *
+                  $fragment_X_entry) => begin
+                    structure_ringbonds, structure_forbidden,
+                    ringbond_group = get_ringbond_paths(
+                        solver,
+                        push!(copy(path), 1),
+                        forbidden_group = forbidden_group
+                    )
+                    fragment_ringbonds, fragment_forbidden,
+                    _ = get_ringbond_paths(
+                        solver, push!(copy(path), 2), forbidden_group = ringbond_group
+                    )
+                    return vcat(structure_ringbonds, fragment_ringbonds),
+                    vcat(structure_forbidden, fragment_forbidden),
+                    []
+                end
+                :(structure * "=" *
                   $fragment_X_entry) => begin
                     structure_ringbonds, structure_forbidden,
                     ringbond_group = get_ringbond_paths(
@@ -444,6 +464,11 @@ function get_ringbond_paths(
                                 (push!(copy(path), children_count),
                                     push!(copy(path), virtual_atom_count)))
                         end
+                        :("=" * digit) => begin
+                            push!(atom_ringbonds,
+                                (push!(copy(path), children_count),
+                                    push!(copy(path), virtual_atom_count)))
+                        end
                         _ => push!(branch_children, children_count)
                     end
                 end
@@ -506,9 +531,16 @@ function get_ringbond_paths(
                     return get_ringbond_paths(
                         solver, push!(copy(path), 1), forbidden_group = forbidden_group)
                 end
+                :("(=" * chain * ")") => begin
+                    return get_ringbond_paths(
+                        solver, push!(copy(path), 1), forbidden_group = forbidden_group)
+                end
                 # Push temporary ringbond path to check for parity of ringbonds in the molecule
                 # The correct path will be updated when fragment_X_entry/starting_fragment is filled
                 :("-" * digit) => begin
+                    return [(copy(path), [-1])], [], []
+                end
+                :("=" * digit) => begin
                     return [(copy(path), [-1])], [], []
                 end
                 _ => return get_ringbond_paths(

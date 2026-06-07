@@ -64,6 +64,13 @@ function interpret_chain(
             return structure_str * "-" * fragment_X_entry_str
         end
 
+        :(structure * "=" * $fragment_X_entry) => begin
+            structure_str = interpret_structure(program.children[1], grammar, min_digit)
+            fragment_X_entry_str = interpret_fragment_X_entry(
+                program.children[2], grammar, min_digit)
+            return structure_str * "=" * fragment_X_entry_str
+        end
+
         _ => throw(ArgumentError("Unknown rule: $rule"))
     end
 end
@@ -116,14 +123,19 @@ function interpret_fragment_X_exit(
     rule = grammar.rules[get_rule(program)]
 
     @match rule begin
-        :("(-" * chain * ")") => begin
-            return "(-" * interpret_chain(program.children[1], grammar, min_digit) * ")"
+        :($fixed_bond * chain * ")") => begin
+            return fixed_bond * interpret_chain(program.children[1], grammar, min_digit) * ")"
         end
-        :("-" * digit) => begin
-            return "-" * interpret_digit(program.children[1], grammar)
+        :($fixed_bond * digit) => begin
+            return fixed_bond * interpret_digit(program.children[1], grammar)
         end
         :("(" * special_bond * $fragment_X_entry * ")") => begin
             return "(-" *
+                   interpret_fragment_X_entry(program.children[2], grammar, min_digit) *
+                   ")"
+        end
+        :("(" * special_double_bond * $fragment_X_entry * ")") => begin
+            return "(=" *
                    interpret_fragment_X_entry(program.children[2], grammar, min_digit) *
                    ")"
         end

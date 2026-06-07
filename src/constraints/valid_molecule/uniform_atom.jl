@@ -179,7 +179,7 @@ function post_atom_constraints!(
                     grammar_data,
                     relevant_bonds = [bond_path]
                 )
-            elseif "-" in rule.args
+            elseif "-" in rule.args || "=" in rule.args
                 bond_path = push!(copy(path), 2)
                 bonds = [relevant_bonds..., bond_path]
 
@@ -209,10 +209,10 @@ function post_atom_constraints!(
         end => begin
             rule = grammar.rules[HerbCore.get_rule(node)]
 
-            if rule == :("(-" * chain * ")")
+            if rule == :("(-" * chain * ")") || rule == :("(=" * chain * ")")
                 post_atom_constraints!(solver, push!(copy(path), 1), grammar_data,
                     relevant_bonds = [copy(path)])
-            elseif :special_bond in rule.args
+            elseif :special_bond in rule.args || :special_double_bond in rule.args
                 post_atom_constraints!(solver, push!(copy(path), 2), grammar_data)
             end
         end

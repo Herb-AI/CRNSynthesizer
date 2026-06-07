@@ -4,6 +4,8 @@ import TOML
 using Dates
 using DataFrames
 using CSV
+# Disable GUI plot pop-ups by running in headless mode
+ENV["GKSwstype"] = "100"
 using StatsPlots
 using Statistics
 using Serialization
