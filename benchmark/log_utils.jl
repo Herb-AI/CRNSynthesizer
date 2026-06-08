@@ -60,7 +60,7 @@ function create_pie_plot(labels_raw::Vector{String}, counts::Vector{Int}, title_
         lbl = labels_raw[i]
         val = counts[i]
         pct = round(val / total * 100; digits = 1)
-        annotate!(p, 0.6 * c, 0.6 * s, text("$lbl\n$val ($pct%)", 8, :black, :center))
+        annotate!(p, 0.6 * c, 0.6 * s, text("$lbl\n$pct%", 8, :black, :center))
     end
     return p
 end
@@ -71,12 +71,53 @@ function make_size_dist_df(sizes::Vector{Int})
         counts_dict[s] = get(counts_dict, s, 0) + 1
     end
     sorted_pairs = sort(collect(counts_dict); by = x -> x[1])
-    lbls = [string(x[1]) for x in sorted_pairs]
-    vals = [x[2] for x in sorted_pairs]
-    total = sum(vals)
-    pcts = total > 0 ? [v / total * 100 for v in vals] : Float64[]
-    return lbls, vals,
-    DataFrame(Molecule_Size = [x[1] for x in sorted_pairs], Count = vals, Percentage = pcts)
+    
+    df_vals = [x[2] for x in sorted_pairs]
+    total = sum(df_vals)
+    pcts = total > 0 ? [v / total * 100 for v in df_vals] : Float64[]
+    
+    merged_lbls = String[]
+    merged_vals = Int[]
+    
+    current_group_sizes = Int[]
+    current_group_val = 0
+    
+    for (sz, val) in sorted_pairs
+        push!(current_group_sizes, sz)
+        current_group_val += val
+        
+        group_pct = total > 0 ? (current_group_val / total * 100) : 0.0
+        if group_pct >= 5.0
+            if length(current_group_sizes) == 1
+                push!(merged_lbls, string(current_group_sizes[1]))
+            else
+                push!(merged_lbls, "$(current_group_sizes[1])-$(current_group_sizes[end])")
+            end
+            push!(merged_vals, current_group_val)
+            empty!(current_group_sizes)
+            current_group_val = 0
+        end
+    end
+    if !isempty(current_group_sizes)
+        if isempty(merged_lbls)
+            if length(current_group_sizes) == 1
+                push!(merged_lbls, string(current_group_sizes[1]))
+            else
+                push!(merged_lbls, "$(current_group_sizes[1])-$(current_group_sizes[end])")
+            end
+            push!(merged_vals, current_group_val)
+        else
+            merged_vals[end] += current_group_val
+            prev_label = merged_lbls[end]
+            start_str = occursin("-", prev_label) ? split(prev_label, "-")[1] : prev_label
+            merged_lbls[end] = "$(start_str)-$(current_group_sizes[end])"
+        end
+    end
+    
+    # The parts remain sorted by size as we iterate over sorted_pairs
+    
+    return merged_lbls, merged_vals,
+    DataFrame(Molecule_Size = [x[1] for x in sorted_pairs], Count = df_vals, Percentage = pcts)
 end
 
 function plot_success_rate_helper(
@@ -159,7 +200,7 @@ end
 
 function plot_comparison_boxplot_helper(run_dir::String, succ_rxn_df::DataFrame,
         metrics::Vector{String}, col_name::Symbol, ylabel_str::String, 
-        filename::String, title::String; is_log_scale::Bool=false, val_digits::Int=1, val_suffix::String="")
+        filename::String, title::String; is_log_scale::Bool=false, val_digits::Int=1, val_suffix::String="", legend_pos::Symbol=:right)
 
     if length(metrics) == 1
         p = boxplot(
@@ -221,7 +262,7 @@ function plot_comparison_boxplot_helper(run_dir::String, succ_rxn_df::DataFrame,
             xlabel = "Similarity Guidance Metric",
             ylabel = ylabel_str,
             title = title,
-            legend = :right,
+            legend = legend_pos,
             size = (600, 450),
             titlefontsize = 9,
             guidefontsize = 9,
@@ -387,7 +428,7 @@ function generate_plots(
         [success_without, success_with],
         xlabel = "BRICS fragments usage",
         ylabel = "Success Rate (%)",
-        title = "Missing Molecule Synthesis (SynRXN rbl/$dataset)\nSuccess Rate ($synthesis_eval_limit Problems Analyzed)",
+        title = "Missing Molecule Synthesis (SynRXN rbl/$dataset)\nSuccess Rate ($synthesis_eval_limit Problems Analysed)",
         legend = false,
         ylimits = (0, 105),
         series_annotations = map(
@@ -415,7 +456,7 @@ function generate_plots(
     p_sizes_with = create_pie_plot(
         sizes_with_lbls,
         sizes_with_vals,
-        "Missing Molecule Synthesis (SynRXN rbl/$dataset) - $failed_with_count Problems Failed\nUnsynthesized Molecule Sizes (with BRICS fragments)"
+        "Missing Molecule Synthesis (SynRXN rbl/$dataset) - $failed_with_count Problems Failed\nUnsynthesised Molecule Sizes (with BRICS fragments)"
     )
     savefig(p_sizes_with,
         joinpath(run_dir, "missing_molecule_synthesis_untractable_sizes_with_fragments.svg"))
@@ -431,7 +472,7 @@ function generate_plots(
     p_sizes_without = create_pie_plot(
         sizes_without_lbls,
         sizes_without_vals,
-        "Missing Molecule Synthesis (SynRXN rbl/$dataset) - $failed_without_count Problems Failed\nUnsynthesized Molecule Sizes (base grammar)"
+        "Missing Molecule Synthesis (SynRXN rbl/$dataset) - $failed_without_count Problems Failed\nUnsynthesised Molecule Sizes (base grammar)"
     )
     savefig(p_sizes_without,
         joinpath(run_dir, "missing_molecule_synthesis_untractable_sizes_without_fragments.svg"))
@@ -533,8 +574,8 @@ function generate_plots(
         xticks = (1:2, ["base grammar", "with BRICS fragments"]),
         xlims = (0.5, 2.5),
         xlabel = "BRICS fragments usage",
-        ylabel = "Molecules Synthesized",
-        title = "Missing Molecule Synthesis (SynRXN rbl/$dataset)\nNumber of Molecules Synthesized until All Targets Found for Successful Problems",
+        ylabel = "Molecules Synthesised",
+        title = "Missing Molecule Synthesis (SynRXN rbl/$dataset)\nNumber of Molecules Synthesised until All Targets Found for Successful Problems",
         legend = false,
         size = (600, 450),
         titlefontsize = 9,
@@ -589,22 +630,22 @@ function generate_plots(
     CSV.write(joinpath(run_dir, "average_reactions_synthesized.csv"), df_rxns_comp)
 
     plot_comparison_boxplot_helper(
-        run_dir, succ_rxn_df, metrics_order, :reactions_synthesized, "Reactions Synthesized",
+        run_dir, succ_rxn_df, metrics_order, :reactions_synthesized, "Reactions Synthesised",
         "average_reactions_synthesized.svg",
-        "Reaction Rebalancing (SynRXN rbl/$dataset)\nNumber of Reactions Synthesized Until Target Found for Successful Problems";
-        is_log_scale=true, val_digits=1, val_suffix=""
+        "Reaction Rebalancing (SynRXN rbl/$dataset)\nNumber of Reactions Synthesised Until Target Found for Successful Problems";
+        is_log_scale=true, val_digits=1, val_suffix="", legend_pos=:bottomright
     )
 
     # 8. Success Rate Comparison Plots
     # All metrics combined
     plot_success_rate_helper(
         run_dir, summary_df, metrics_order, "synthesis_success_rate.svg",
-        "Reaction Rebalancing (SynRXN rbl/$dataset)\nSuccess Rate ($synthesis_eval_limit Problems Analyzed)"
+        "Reaction Rebalancing (SynRXN rbl/$dataset)\nSuccess Rate ($synthesis_eval_limit Problems Analysed)"
     )
     # :none metric only
     plot_success_rate_helper(
         run_dir, summary_df, ["none"], "synthesis_success_rate_none.svg",
-        "Reaction Rebalancing (SynRXN rbl/$dataset)\nSuccess Rate ($synthesis_eval_limit Problems Analyzed)"
+        "Reaction Rebalancing (SynRXN rbl/$dataset)\nSuccess Rate ($synthesis_eval_limit Problems Analysed)"
     )
 
     # 9. Runtime Comparison Plots
@@ -613,7 +654,7 @@ function generate_plots(
         run_dir, succ_rxn_df, metrics_order, :elapsed_time_seconds, "Synthesis Time (s)",
         "synthesis_average_time.svg",
         "Reaction Rebalancing (SynRXN rbl/$dataset)\nRuntime of Successful Reaction Syntheses";
-        is_log_scale=false, val_digits=2, val_suffix="s"
+        is_log_scale=false, val_digits=2, val_suffix="s", legend_pos=:right
     )
     # :none metric only
     plot_comparison_boxplot_helper(
@@ -626,9 +667,9 @@ function generate_plots(
     # 10. Reactions Synthesized Comparison Plots
     # :none metric only
     plot_comparison_boxplot_helper(
-        run_dir, succ_rxn_df, ["none"], :reactions_synthesized, "Reactions Synthesized",
+        run_dir, succ_rxn_df, ["none"], :reactions_synthesized, "Reactions Synthesised",
         "average_reactions_synthesized_none.svg",
-        "Reaction Rebalancing (SynRXN rbl/$dataset)\nNumber of Reactions Synthesized Until Target Found for Successful Problems";
+        "Reaction Rebalancing (SynRXN rbl/$dataset)\nNumber of Reactions Synthesised Until Target Found for Successful Problems";
         is_log_scale=true, val_digits=1, val_suffix=""
     )
 
