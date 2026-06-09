@@ -38,295 +38,138 @@ function get_package_versions()
     return "synrxn==$synrxn_version"
 end
 
-function create_pie_plot(labels_raw::Vector{String}, counts::Vector{Int}, title_str::String)
-    total = sum(counts)
-    if total == 0
-        return pie(title = title_str, legend = false,
-            grid = false, xaxis = false, yaxis = false,
-            annotation = (0.5, 0.5, "No data available"))
-    end
-
-    p = pie(labels_raw, counts,
-        title = title_str,
-        legend = false,
-        titlefontsize = 9,
-        size = (600, 450)
-    )
-
-    # Calculate slice angles to annotate directly on the slices
-    θ = (cumsum(counts) - counts/2) .* 360 / total
-    for (i, θ_i) in enumerate(θ)
-        s, c = sincosd(θ_i)
-        lbl = labels_raw[i]
-        val = counts[i]
-        pct = round(val / total * 100; digits = 1)
-        annotate!(p, 0.6 * c, 0.6 * s, text("$lbl\n$pct%", 8, :black, :center))
-    end
-    return p
-end
-
-function make_size_dist_df(sizes::Vector{Int})
-    counts_dict = Dict{Int, Int}()
-    for s in sizes
-        counts_dict[s] = get(counts_dict, s, 0) + 1
-    end
-    sorted_pairs = sort(collect(counts_dict); by = x -> x[1])
-    
-    df_vals = [x[2] for x in sorted_pairs]
-    total = sum(df_vals)
-    pcts = total > 0 ? [v / total * 100 for v in df_vals] : Float64[]
-    
-    merged_lbls = String[]
-    merged_vals = Int[]
-    
-    current_group_sizes = Int[]
-    current_group_val = 0
-    
-    for (sz, val) in sorted_pairs
-        push!(current_group_sizes, sz)
-        current_group_val += val
-        
-        group_pct = total > 0 ? (current_group_val / total * 100) : 0.0
-        if group_pct >= 5.0
-            if length(current_group_sizes) == 1
-                push!(merged_lbls, string(current_group_sizes[1]))
-            else
-                push!(merged_lbls, "$(current_group_sizes[1])-$(current_group_sizes[end])")
-            end
-            push!(merged_vals, current_group_val)
-            empty!(current_group_sizes)
-            current_group_val = 0
-        end
-    end
-    if !isempty(current_group_sizes)
-        if isempty(merged_lbls)
-            if length(current_group_sizes) == 1
-                push!(merged_lbls, string(current_group_sizes[1]))
-            else
-                push!(merged_lbls, "$(current_group_sizes[1])-$(current_group_sizes[end])")
-            end
-            push!(merged_vals, current_group_val)
-        else
-            merged_vals[end] += current_group_val
-            prev_label = merged_lbls[end]
-            start_str = occursin("-", prev_label) ? split(prev_label, "-")[1] : prev_label
-            merged_lbls[end] = "$(start_str)-$(current_group_sizes[end])"
-        end
-    end
-    
-    # The parts remain sorted by size as we iterate over sorted_pairs
-    
-    return merged_lbls, merged_vals,
-    DataFrame(Molecule_Size = [x[1] for x in sorted_pairs], Count = df_vals, Percentage = pcts)
-end
 
 function plot_success_rate_helper(
         run_dir::String, summary_df::DataFrame, metrics::Vector{String},
-        filename::String, title::String)
+        filename::String, dataset::String, num_problems::Int)
 
-    if length(metrics) == 1
-        m = metrics[1]
-        row_with = filter(r -> r.similarity_metric == m && r.use_fragments == true, summary_df)
-        val_with = isempty(row_with) ? 0.0 : row_with[1, :success_rate]
-        count_with = isempty(row_with) ? 0 : row_with[1, :successful_runs]
-
-        row_without = filter(r -> r.similarity_metric == m && r.use_fragments == false, summary_df)
-        val_without = isempty(row_without) ? 0.0 : row_without[1, :success_rate]
-        count_without = isempty(row_without) ? 0 : row_without[1, :successful_runs]
-
-        p = bar(
-            ["base grammar", "with BRICS fragments"],
-            [val_without, val_with],
-            xlabel = "BRICS fragments usage",
-            ylabel = "Success Rate (%)",
-            title = title,
-            legend = false,
-            ylimits = (0, 105),
-            series_annotations = map(
-                (v, c) -> Plots.text("$(round(v; digits=1))%\n($c)", 8, :center, :bottom),
-                [val_without, val_with], [count_without, count_with]),
-            color = [:lightgrey, :dodgerblue],
-            linewidth = 1.2,
-            edgecolor = :black,
-            titlefontsize = 9,
-            guidefontsize = 9,
-            tickfontsize = 8,
-            size = (600, 450)
-        )
-        savefig(p, joinpath(run_dir, filename))
-    else
-        success_with_metric = Float64[]
-        success_without_metric = Float64[]
-        success_counts_with = Int[]
-        success_counts_without = Int[]
-
-        for m in metrics
-            row_with = filter(r -> r.similarity_metric == m && r.use_fragments == true, summary_df)
-            push!(success_with_metric, isempty(row_with) ? 0.0 : row_with[1, :success_rate])
-            push!(success_counts_with, isempty(row_with) ? 0 :
-                                       row_with[1, :successful_runs])
-
-            row_without = filter(r -> r.similarity_metric == m && r.use_fragments == false, summary_df)
-            push!(success_without_metric, isempty(row_without) ? 0.0 :
-                                          row_without[1, :success_rate])
-            push!(success_counts_without, isempty(row_without) ? 0 :
-                                          row_without[1, :successful_runs])
-        end
-
-        success_matrix = hcat(success_without_metric, success_with_metric)
-        success_counts_matrix = hcat(success_counts_without, success_counts_with)
-        display_metrics = map(m -> m == "tanimoto" ? "Tanimoto using Morgan2 with size 1024" : m, metrics)
-        p = groupedbar(display_metrics, success_matrix,
-            xlabel = "Similarity Guidance Metric",
-            ylabel = "Success Rate (%)",
-            label = ["base grammar" "with BRICS fragments"],
-            title = title,
-            legend = :right,
-            ylimits = (0, 105),
-            series_annotations = map(
-                (v, c) -> Plots.text("$(round(v; digits=1))%\n($c)", 7, :center, :bottom), success_matrix, success_counts_matrix),
-            color = [:lightgrey :dodgerblue],
-            linewidth = 1.2,
-            edgecolor = :black,
-            titlefontsize = 9,
-            guidefontsize = 9,
-            tickfontsize = 8,
-            legendfontsize = 8,
-            size = (600, 450)
-        )
-        savefig(p, joinpath(run_dir, filename))
+    all_groups = [
+        (false, "none", "base grammar, no similarity"),
+        (false, "tanimoto", "base grammar, Tanimoto + Morgan2"),
+        (true, "none", "with fragments, no similarity"),
+        (true, "tanimoto", "with fragments, Tanimoto + Morgan2")
+    ]
+    
+    active_groups = filter(g -> g[2] in metrics, all_groups)
+    N = length(active_groups)
+    
+    vals = Float64[]
+    counts = Int[]
+    for g in active_groups
+        use_frag, metric, label = g
+        row = filter(r -> r.similarity_metric == metric && r.use_fragments == use_frag, summary_df)
+        push!(vals, isempty(row) ? 0.0 : row[1, :success_rate])
+        push!(counts, isempty(row) ? 0 : row[1, :successful_runs])
     end
+
+    color_map = Dict(
+        "base grammar, no similarity" => "#E69F00",
+        "base grammar, Tanimoto + Morgan2" => "#D55E00",
+        "with fragments, no similarity" => "#56B4E9",
+        "with fragments, Tanimoto + Morgan2" => "#0072B2"
+    )
+    colors = reshape([color_map[g[3]] for g in active_groups], 1, N)
+    labels = reshape([g[3] for g in active_groups], 1, N)
+    
+    val_matrix = reshape(vals, 1, N)
+    
+    annots = reshape([Plots.text("$(round(vals[i]; digits=1))%\n($(counts[i]))", 7, :center, :bottom) for i in 1:N], 1, N)
+    
+    p = groupedbar(
+        ["$dataset\n($num_problems)"],
+        val_matrix,
+        xlabel = "Dataset",
+        ylabel = "Success Rate (%)",
+        title = "Reaction Rebalancing (SynRXN rbl)\nSuccess Rate",
+        label = labels,
+        legend = :outerbottom,
+        ylimits = (0, 105),
+        series_annotations = annots,
+        color = colors,
+        linewidth = 1.2,
+        edgecolor = :black,
+        titlefontsize = 9,
+        guidefontsize = 9,
+        tickfontsize = 8,
+        legendfontsize = 8,
+        size = (600, 450)
+    )
+    savefig(p, joinpath(run_dir, filename))
 end
 
 function plot_comparison_boxplot_helper(run_dir::String, succ_rxn_df::DataFrame,
         metrics::Vector{String}, col_name::Symbol, ylabel_str::String, 
-        filename::String, title::String; is_log_scale::Bool=false, val_digits::Int=1, val_suffix::String="", legend_pos::Symbol=:right)
+        filename::String, title::String, dataset::String; is_log_scale::Bool=false, val_digits::Int=1, val_suffix::String="")
 
-    if length(metrics) == 1
-        p = boxplot(
-            xticks = (1:2, ["base grammar", "with BRICS fragments"]),
-            xlims = (0.5, 2.5),
-            xlabel = "BRICS fragments usage",
-            ylabel = ylabel_str,
-            title = title,
-            legend = false,
-            size = (600, 450),
-            titlefontsize = 9,
-            guidefontsize = 9,
-            tickfontsize = 8,
-            yscale = is_log_scale ? :log10 : :identity
-        )
-
-        vals_without = filter(
-            r -> r.similarity_metric == metrics[1] &&
-                 r.use_fragments == false, succ_rxn_df)[!, col_name]
-        if !isempty(vals_without)
-            boxplot!(p, fill(1, length(vals_without)), vals_without, color = :lightgrey,
-                fillalpha = 0.7, bar_width = 0.6, linecolor = :black)
-        end
-
-        vals_with = filter(
-            r -> r.similarity_metric == metrics[1] &&
-                 r.use_fragments == true, succ_rxn_df)[!, col_name]
-        if !isempty(vals_with)
-            boxplot!(p, fill(2, length(vals_with)), vals_with, color = :dodgerblue,
-                fillalpha = 0.7, bar_width = 0.6, linecolor = :black)
-        end
-
-        max_val = max(isempty(vals_without) ? 0.0 : maximum(vals_without),
-            isempty(vals_with) ? 0.0 : maximum(vals_with))
-        max_val = max_val == 0.0 ? 1.0 : max_val
-        
-        y_max_multiplier = is_log_scale ? 2.5 : 1.3
-        y_min = is_log_scale ? 0.5 : 0
-        boxplot!(p, ylimits = (y_min, max_val * y_max_multiplier))
-        
-        annot_y = is_log_scale ? max_val * 1.5 : max_val * 1.15
-
-        annotate!(p,
-            1,
-            annot_y,
-            isempty(vals_without) ? text("N/A", 8, :center, :bottom) :
-            text("Avg: $(round(mean(vals_without); digits=val_digits))$(val_suffix)", 8, :center, :bottom))
-        annotate!(p,
-            2,
-            annot_y,
-            isempty(vals_with) ? text("N/A", 8, :center, :bottom) :
-            text("Avg: $(round(mean(vals_with); digits=val_digits))$(val_suffix)", 8, :center, :bottom))
-        savefig(p, joinpath(run_dir, filename))
-    else
-        display_metrics = map(m -> m == "tanimoto" ? "Tanimoto using Morgan2 with size 1024" : m, metrics)
-        p = boxplot(
-            xticks = (1:length(display_metrics), display_metrics),
-            xlims = (0.5, length(metrics) + 0.5),
-            xlabel = "Similarity Guidance Metric",
-            ylabel = ylabel_str,
-            title = title,
-            legend = legend_pos,
-            size = (600, 450),
-            titlefontsize = 9,
-            guidefontsize = 9,
-            tickfontsize = 8,
-            legendfontsize = 8,
-            yscale = is_log_scale ? :log10 : :identity
-        )
-        boxplot!(p, [0], [0], label = "base grammar", color = :lightgrey,
+    all_groups = [
+        (false, "none", "base grammar, no similarity", "#E69F00"),
+        (false, "tanimoto", "base grammar, Tanimoto + Morgan2", "#D55E00"),
+        (true, "none", "with fragments, no similarity", "#56B4E9"),
+        (true, "tanimoto", "with fragments, Tanimoto + Morgan2", "#0072B2")
+    ]
+    
+    active_groups = filter(g -> g[2] in metrics, all_groups)
+    N = length(active_groups)
+    
+    p = boxplot(
+        xticks = (1:1, [dataset]),
+        xlims = (0.5, 1.5),
+        xlabel = "Dataset",
+        ylabel = ylabel_str,
+        title = title,
+        legend = :outerbottom,
+        size = (600, 450),
+        titlefontsize = 9,
+        guidefontsize = 9,
+        tickfontsize = 8,
+        legendfontsize = 8,
+        yscale = is_log_scale ? :log10 : :identity
+    )
+    
+    # Pre-populate legend entries to guarantee the correct legend order
+    for g in active_groups
+        boxplot!(p, [0], [0], label = g[3], color = g[4],
             seriestype = :shape, fillalpha = 0.7, linecolor = :black)
-        boxplot!(p, [0], [0], label = "with BRICS fragments", color = :dodgerblue,
-            seriestype = :shape, fillalpha = 0.7, linecolor = :black)
-
-        max_val = 0.0
-        for (i, m) in enumerate(metrics)
-            sub_df_without = filter(
-                r -> r.similarity_metric == m &&
-                     r.use_fragments == false, succ_rxn_df)
-            vals_without = sub_df_without[!, col_name]
-            if !isempty(vals_without)
-                boxplot!(p, fill(i - 0.22, length(vals_without)),
-                    vals_without, label = "", color = :lightgrey,
-                    fillalpha = 0.7, bar_width = 0.35, linecolor = :black)
-                max_val = max(max_val, maximum(vals_without))
-            end
-
-            sub_df_with = filter(r -> r.similarity_metric == m && r.use_fragments == true, succ_rxn_df)
-            vals_with = sub_df_with[!, col_name]
-            if !isempty(vals_with)
-                boxplot!(p, fill(i + 0.22, length(vals_with)), vals_with,
-                    label = "", color = :dodgerblue, fillalpha = 0.7,
-                    bar_width = 0.35, linecolor = :black)
-                max_val = max(max_val, maximum(vals_with))
-            end
-        end
-
-        max_val = max_val == 0.0 ? 1.0 : max_val
-        y_max_multiplier = is_log_scale ? 2.5 : 1.3
-        y_min = is_log_scale ? 0.5 : 0
-        boxplot!(p, ylimits = (y_min, max_val * y_max_multiplier))
-        
-        annot_y = is_log_scale ? max_val * 1.5 : max_val * 1.15
-
-        for (i, m) in enumerate(metrics)
-            sub_df_without = filter(
-                r -> r.similarity_metric == m &&
-                     r.use_fragments == false, succ_rxn_df)
-            vals_without = sub_df_without[!, col_name]
-            if !isempty(vals_without)
-                annotate!(p,
-                    i - 0.22,
-                    annot_y,
-                    text("Avg: $(round(mean(vals_without); digits=val_digits))$(val_suffix)", 7, :center, :bottom))
-            end
-
-            sub_df_with = filter(r -> r.similarity_metric == m && r.use_fragments == true, succ_rxn_df)
-            vals_with = sub_df_with[!, col_name]
-            if !isempty(vals_with)
-                annotate!(p, i + 0.22, annot_y,
-                    text("Avg: $(round(mean(vals_with); digits=val_digits))$(val_suffix)", 7, :center, :bottom))
-            end
-        end
-
-        savefig(p, joinpath(run_dir, filename))
     end
+    
+    max_val = 0.0
+    xs = range(1 - 0.22, 1 + 0.22, length=N)
+    bar_w = 0.44 / (N - 1)
+    for (idx, g) in enumerate(active_groups)
+        use_frag, metric, label, col = g
+        sub_df = filter(r -> r.similarity_metric == metric && r.use_fragments == use_frag, succ_rxn_df)
+        vals = sub_df[!, col_name]
+        if !isempty(vals)
+            boxplot!(p, fill(xs[idx], length(vals)), vals,
+                label = "", color = col, fillalpha = 0.7,
+                bar_width = bar_w, linecolor = :black)
+            max_val = max(max_val, maximum(vals))
+        end
+    end
+    
+    if max_val == 0.0
+        # If no data was plotted, show a message
+        annotate!(p, 1, is_log_scale ? 1.0 : 0.5, text("No successful runs", 10, :center))
+        savefig(p, joinpath(run_dir, filename))
+        return
+    end
+
+    y_max_multiplier = is_log_scale ? 2.5 : 1.3
+    y_min = is_log_scale ? 0.5 : 0
+    boxplot!(p, ylimits = (y_min, max_val * y_max_multiplier))
+    
+    annot_y = is_log_scale ? max_val * 1.5 : max_val * 1.15
+    for (idx, g) in enumerate(active_groups)
+        use_frag, metric, label, col = g
+        sub_df = filter(r -> r.similarity_metric == metric && r.use_fragments == use_frag, succ_rxn_df)
+        vals = sub_df[!, col_name]
+        if !isempty(vals)
+            annotate!(p, xs[idx], annot_y,
+                text("Avg: $(round(mean(vals); digits=val_digits))$(val_suffix)", 7, :center, :bottom))
+        end
+    end
+
+    savefig(p, joinpath(run_dir, filename))
 end
 
 # -------------------------------------------------------------
@@ -423,87 +266,57 @@ function generate_plots(
     )
     CSV.write(joinpath(run_dir, "missing_molecule_synthesis_success_rate.csv"), success_rate_df)
 
-    p_success_rate = bar(
-        ["base grammar", "with BRICS fragments"],
-        [success_without, success_with],
-        xlabel = "BRICS fragments usage",
+    p_success_rate = groupedbar(
+        ["$dataset\n($synthesis_eval_limit)"],
+        [success_without success_with],
+        xlabel = "Dataset",
         ylabel = "Success Rate (%)",
-        title = "Missing Molecule Synthesis (SynRXN rbl/$dataset)\nSuccess Rate ($synthesis_eval_limit Problems Analysed)",
-        legend = false,
+        title = "Missing Molecule Synthesis (SynRXN rbl)\nSuccess Rate",
+        label = ["base grammar" "with BRICS fragments"],
+        legend = :outerbottom,
         ylimits = (0, 105),
-        series_annotations = map(
-            (v, c) -> Plots.text("$(round(v; digits=1))% ($c)", 8, :center, :bottom),
-            [success_without, success_with], [succ_count_without, succ_count_with]),
-        color = [:lightgrey, :dodgerblue],
+        series_annotations = [Plots.text("$(round(success_without; digits=1))% ($succ_count_without)", 8, :center, :bottom) Plots.text("$(round(success_with; digits=1))% ($succ_count_with)", 8, :center, :bottom)],
+        color = ["#E69F00" "#0072B2"],
         edgecolor = :black,
         linewidth = 1.2,
         titlefontsize = 9,
         guidefontsize = 9,
         tickfontsize = 8,
+        legendfontsize = 8,
         size = (600, 450)
     )
     savefig(p_success_rate, joinpath(run_dir, "missing_molecule_synthesis_success_rate.svg"))
 
-    # 4. Pie plots & CSV: Sizes of untractable molecules based on missing molecule synthesis subproblem
-    # With fragments
-    sizes_with_lbls, sizes_with_vals,
-    sizes_with_df = make_size_dist_df(missing_molecule_synthesis_stats[true][:unfeasible_sizes])
-    CSV.write(
-        joinpath(run_dir, "missing_molecule_synthesis_untractable_sizes_with_fragments.csv"),
-        sizes_with_df)
-
-    failed_with_count = sum(.!missing_molecule_synthesis_stats[true][:successes])
-    p_sizes_with = create_pie_plot(
-        sizes_with_lbls,
-        sizes_with_vals,
-        "Missing Molecule Synthesis (SynRXN rbl/$dataset) - $failed_with_count Problems Failed\nUnsynthesised Molecule Sizes (with BRICS fragments)"
-    )
-    savefig(p_sizes_with,
-        joinpath(run_dir, "missing_molecule_synthesis_untractable_sizes_with_fragments.svg"))
-
-    # Without fragments
-    sizes_without_lbls, sizes_without_vals,
-    sizes_without_df = make_size_dist_df(missing_molecule_synthesis_stats[false][:unfeasible_sizes])
-    CSV.write(
-        joinpath(run_dir, "missing_molecule_synthesis_untractable_sizes_without_fragments.csv"),
-        sizes_without_df)
-
-    failed_without_count = sum(.!missing_molecule_synthesis_stats[false][:successes])
-    p_sizes_without = create_pie_plot(
-        sizes_without_lbls,
-        sizes_without_vals,
-        "Missing Molecule Synthesis (SynRXN rbl/$dataset) - $failed_without_count Problems Failed\nUnsynthesised Molecule Sizes (base grammar)"
-    )
-    savefig(p_sizes_without,
-        joinpath(run_dir, "missing_molecule_synthesis_untractable_sizes_without_fragments.svg"))
-
-    # 4b. Combined CSV: unfeasible molecule sizes comparison
+    # 4. Sizes of untractable molecules summary CSV
     sizes_with = missing_molecule_synthesis_stats[true][:unfeasible_sizes]
     sizes_without = missing_molecule_synthesis_stats[false][:unfeasible_sizes]
-    unique_sizes = sort(unique(vcat(sizes_with, sizes_without)))
 
     total_with = length(sizes_with)
     total_without = length(sizes_without)
 
-    comp_rows = []
-    for sz in unique_sizes
-        cnt_with = count(==(sz), sizes_with)
-        pct_with = total_with > 0 ? (cnt_with / total_with) * 100 : 0.0
+    pct_le_3_with = total_with > 0 ? count(s -> s <= 3, sizes_with) / total_with * 100 : 0.0
+    pct_4_6_with = total_with > 0 ? count(s -> 4 <= s <= 6, sizes_with) / total_with * 100 : 0.0
+    pct_7_9_with = total_with > 0 ? count(s -> 7 <= s <= 9, sizes_with) / total_with * 100 : 0.0
+    pct_10_13_with = total_with > 0 ? count(s -> 10 <= s <= 13, sizes_with) / total_with * 100 : 0.0
+    pct_ge_14_with = total_with > 0 ? count(s -> s >= 14, sizes_with) / total_with * 100 : 0.0
 
-        cnt_without = count(==(sz), sizes_without)
-        pct_without = total_without > 0 ? (cnt_without / total_without) * 100 : 0.0
+    pct_le_3_without = total_without > 0 ? count(s -> s <= 3, sizes_without) / total_without * 100 : 0.0
+    pct_4_6_without = total_without > 0 ? count(s -> 4 <= s <= 6, sizes_without) / total_without * 100 : 0.0
+    pct_7_9_without = total_without > 0 ? count(s -> 7 <= s <= 9, sizes_without) / total_without * 100 : 0.0
+    pct_10_13_without = total_without > 0 ? count(s -> 10 <= s <= 13, sizes_without) / total_without * 100 : 0.0
+    pct_ge_14_without = total_without > 0 ? count(s -> s >= 14, sizes_without) / total_without * 100 : 0.0
 
-        push!(comp_rows,
-            (
-                Molecule_Size = sz,
-                Count_With_Fragments = cnt_with,
-                Percentage_With_Fragments = round(pct_with; digits = 1),
-                Count_Without_Fragments = cnt_without,
-                Percentage_Without_Fragments = round(pct_without; digits = 1)
-            ))
-    end
-    comp_df = DataFrame(comp_rows)
-    CSV.write(joinpath(run_dir, "missing_molecule_synthesis_untractable_sizes_comparison.csv"), comp_df)
+    unsynthesised_sizes_df = DataFrame(
+        Symbol("dataset") => [dataset, dataset],
+        Symbol("with fragments or base grammar") => ["base grammar", "with fragments"],
+        Symbol("total number of unsynthesised molecules") => [total_without, total_with],
+        Symbol("percentage of missing molecules with sizes <= 3") => [round(pct_le_3_without; digits=1), round(pct_le_3_with; digits=1)],
+        Symbol("percentage of missing molecules with sizes 4-6") => [round(pct_4_6_without; digits=1), round(pct_4_6_with; digits=1)],
+        Symbol("percentage of missing molecules with sizes 7-9") => [round(pct_7_9_without; digits=1), round(pct_7_9_with; digits=1)],
+        Symbol("percentage of missing molecules with sizes 10-13") => [round(pct_10_13_without; digits=1), round(pct_10_13_with; digits=1)],
+        Symbol("percentage of missing molecules with sizes >= 14") => [round(pct_ge_14_without; digits=1), round(pct_ge_14_with; digits=1)]
+    )
+    CSV.write(joinpath(run_dir, "missing_molecule_synthesis_unsynthesised_sizes.csv"), unsynthesised_sizes_df)
 
     # 5. Box plot & CSV: Runtime of missing molecule synthesis subproblem
     runtimes_succ_with = missing_molecule_synthesis_stats[true][:runtimes][missing_molecule_synthesis_stats[true][:successes]]
@@ -519,24 +332,31 @@ function generate_plots(
     CSV.write(joinpath(run_dir, "missing_molecule_synthesis_average_runtime.csv"), runtime_df)
 
     p_runtime = boxplot(
-        xticks = (1:2, ["base grammar", "with BRICS fragments"]),
-        xlims = (0.5, 2.5),
-        xlabel = "BRICS fragments usage",
+        xticks = (1:1, [dataset]),
+        xlims = (0.5, 1.5),
+        xlabel = "Dataset",
         ylabel = "Runtime (s)",
-        title = "Missing Molecule Synthesis (SynRXN rbl/$dataset)\nRuntime of Successful Molecule Syntheses",
-        legend = false,
+        title = "Missing Molecule Synthesis (SynRXN rbl)\nRuntime of Successful Molecule Syntheses",
+        legend = :outerbottom,
         size = (600, 450),
         titlefontsize = 9,
         guidefontsize = 9,
-        tickfontsize = 8
+        tickfontsize = 8,
+        legendfontsize = 8
     )
+    # Legend
+    boxplot!(p_runtime, [0], [0], label = "base grammar", color = "#E69F00",
+        seriestype = :shape, fillalpha = 0.7, linecolor = :black)
+    boxplot!(p_runtime, [0], [0], label = "with BRICS fragments", color = "#0072B2",
+        seriestype = :shape, fillalpha = 0.7, linecolor = :black)
+
     if !isempty(runtimes_succ_without)
-        boxplot!(p_runtime, fill(1, length(runtimes_succ_without)), runtimes_succ_without,
-            color = :lightgrey, fillalpha = 0.7, bar_width = 0.6, linecolor = :black)
+        boxplot!(p_runtime, fill(1 - 0.22, length(runtimes_succ_without)), runtimes_succ_without,
+            label = "", color = "#E69F00", fillalpha = 0.7, bar_width = 0.44, linecolor = :black)
     end
     if !isempty(runtimes_succ_with)
-        boxplot!(p_runtime, fill(2, length(runtimes_succ_with)), runtimes_succ_with,
-            color = :dodgerblue, fillalpha = 0.7, bar_width = 0.6, linecolor = :black)
+        boxplot!(p_runtime, fill(1 + 0.22, length(runtimes_succ_with)), runtimes_succ_with,
+            label = "", color = "#0072B2", fillalpha = 0.7, bar_width = 0.44, linecolor = :black)
     end
 
     max_rt_all = max(isempty(runtimes_succ_without) ? 0.0 : maximum(runtimes_succ_without),
@@ -545,12 +365,12 @@ function generate_plots(
     boxplot!(p_runtime, ylims = (0, max_rt_all * 1.3))
 
     annotate!(p_runtime,
-        1,
+        1 - 0.22,
         max_rt_all * 1.15,
         isempty(runtimes_succ_without) ? text("N/A", 8, :center, :bottom) :
         text("Avg: $(round(runtime_without; digits=2))s", 8, :center, :bottom))
     annotate!(p_runtime,
-        2,
+        1 + 0.22,
         max_rt_all * 1.15,
         isempty(runtimes_succ_with) ? text("N/A", 8, :center, :bottom) :
         text("Avg: $(round(runtime_with; digits=2))s", 8, :center, :bottom))
@@ -571,24 +391,31 @@ function generate_plots(
     CSV.write(joinpath(run_dir, "average_molecules_synthesized.csv"), mols_df)
 
     p_mols = boxplot(
-        xticks = (1:2, ["base grammar", "with BRICS fragments"]),
-        xlims = (0.5, 2.5),
-        xlabel = "BRICS fragments usage",
+        xticks = (1:1, [dataset]),
+        xlims = (0.5, 1.5),
+        xlabel = "Dataset",
         ylabel = "Molecules Synthesised",
-        title = "Missing Molecule Synthesis (SynRXN rbl/$dataset)\nNumber of Molecules Synthesised until All Targets Found for Successful Problems",
-        legend = false,
+        title = "Missing Molecule Synthesis (SynRXN rbl)\nNumber of Molecules Synthesised until All Targets Found for Successful Problems",
+        legend = :outerbottom,
         size = (600, 450),
         titlefontsize = 9,
         guidefontsize = 9,
-        tickfontsize = 8
+        tickfontsize = 8,
+        legendfontsize = 8
     )
+    # Legend
+    boxplot!(p_mols, [0], [0], label = "base grammar", color = "#E69F00",
+        seriestype = :shape, fillalpha = 0.7, linecolor = :black)
+    boxplot!(p_mols, [0], [0], label = "with BRICS fragments", color = "#0072B2",
+        seriestype = :shape, fillalpha = 0.7, linecolor = :black)
+
     if !isempty(mols_succ_without)
-        boxplot!(p_mols, fill(1, length(mols_succ_without)), mols_succ_without,
-            color = :lightgrey, fillalpha = 0.7, bar_width = 0.6, linecolor = :black)
+        boxplot!(p_mols, fill(1 - 0.22, length(mols_succ_without)), mols_succ_without,
+            label = "", color = "#E69F00", fillalpha = 0.7, bar_width = 0.44, linecolor = :black)
     end
     if !isempty(mols_succ_with)
-        boxplot!(p_mols, fill(2, length(mols_succ_with)), mols_succ_with,
-            color = :dodgerblue, fillalpha = 0.7, bar_width = 0.6, linecolor = :black)
+        boxplot!(p_mols, fill(1 + 0.22, length(mols_succ_with)), mols_succ_with,
+            label = "", color = "#0072B2", fillalpha = 0.7, bar_width = 0.44, linecolor = :black)
     end
 
     max_mols_all = max(isempty(mols_succ_without) ? 0.0 : maximum(mols_succ_without),
@@ -597,12 +424,12 @@ function generate_plots(
     boxplot!(p_mols, ylims = (0, max_mols_all * 1.3))
 
     annotate!(p_mols,
-        1,
+        1 - 0.22,
         max_mols_all * 1.15,
         isempty(mols_succ_without) ? text("N/A", 8, :center, :bottom) :
         text("Avg: $(round(avg_mols_without; digits=1))", 8, :center, :bottom))
     annotate!(p_mols,
-        2,
+        1 + 0.22,
         max_mols_all * 1.15,
         isempty(mols_succ_with) ? text("N/A", 8, :center, :bottom) :
         text("Avg: $(round(avg_mols_with; digits=1))", 8, :center, :bottom))
@@ -632,45 +459,25 @@ function generate_plots(
     plot_comparison_boxplot_helper(
         run_dir, succ_rxn_df, metrics_order, :reactions_synthesized, "Reactions Synthesised",
         "average_reactions_synthesized.svg",
-        "Reaction Rebalancing (SynRXN rbl/$dataset)\nNumber of Reactions Synthesised Until Target Found for Successful Problems";
-        is_log_scale=true, val_digits=1, val_suffix="", legend_pos=:bottomright
+        "Reaction Rebalancing (SynRXN rbl)\nNumber of Reactions Synthesised Until Target Found for Successful Problems",
+        dataset;
+        is_log_scale=true, val_digits=1, val_suffix=""
     )
 
     # 8. Success Rate Comparison Plots
     # All metrics combined
     plot_success_rate_helper(
         run_dir, summary_df, metrics_order, "synthesis_success_rate.svg",
-        "Reaction Rebalancing (SynRXN rbl/$dataset)\nSuccess Rate ($synthesis_eval_limit Problems Analysed)"
+        dataset, synthesis_eval_limit
     )
-    # :none metric only
-    plot_success_rate_helper(
-        run_dir, summary_df, ["none"], "synthesis_success_rate_none.svg",
-        "Reaction Rebalancing (SynRXN rbl/$dataset)\nSuccess Rate ($synthesis_eval_limit Problems Analysed)"
-    )
-
     # 9. Runtime Comparison Plots
     # All metrics combined
     plot_comparison_boxplot_helper(
         run_dir, succ_rxn_df, metrics_order, :elapsed_time_seconds, "Synthesis Time (s)",
         "synthesis_average_time.svg",
-        "Reaction Rebalancing (SynRXN rbl/$dataset)\nRuntime of Successful Reaction Syntheses";
-        is_log_scale=false, val_digits=2, val_suffix="s", legend_pos=:right
-    )
-    # :none metric only
-    plot_comparison_boxplot_helper(
-        run_dir, succ_rxn_df, ["none"], :elapsed_time_seconds, "Synthesis Time (s)",
-        "synthesis_average_time_none.svg",
-        "Reaction Rebalancing (SynRXN rbl/$dataset)\nRuntime of Successful Reaction Syntheses";
+        "Reaction Rebalancing (SynRXN rbl)\nRuntime of Successful Reaction Syntheses",
+        dataset;
         is_log_scale=false, val_digits=2, val_suffix="s"
-    )
-
-    # 10. Reactions Synthesized Comparison Plots
-    # :none metric only
-    plot_comparison_boxplot_helper(
-        run_dir, succ_rxn_df, ["none"], :reactions_synthesized, "Reactions Synthesised",
-        "average_reactions_synthesized_none.svg",
-        "Reaction Rebalancing (SynRXN rbl/$dataset)\nNumber of Reactions Synthesised Until Target Found for Successful Problems";
-        is_log_scale=true, val_digits=1, val_suffix=""
     )
 
     # 11. Save corresponding CSV comparison tables
@@ -713,35 +520,6 @@ function generate_plots(
         Average_Synthesis_Time_With_Fragments_Seconds = time_with_metric
     )
     CSV.write(joinpath(run_dir, "synthesis_average_time.csv"), time_comparison_df)
-
-    # For :none metric specifically
-    none_row_with = filter(r -> r.similarity_metric == "none" && r.use_fragments == true, summary_df)
-    none_row_without = filter(
-        r -> r.similarity_metric == "none" &&
-             r.use_fragments == false, summary_df)
-
-    succ_rxn_none = filter(r -> r.similarity_metric == "none", succ_rxn_df)
-    none_rxns_with = filter(r -> r.use_fragments == true, succ_rxn_none)
-    none_rxns_without = filter(r -> r.use_fragments == false, succ_rxn_none)
-
-    none_comp_df = DataFrame(
-        Fragments_Setting = ["base grammar", "with BRICS fragments"],
-        Success_Rate_Percentage = [
-            isempty(none_row_without) ? 0.0 : none_row_without[1, :success_rate],
-            isempty(none_row_with) ? 0.0 : none_row_with[1, :success_rate]
-        ],
-        Average_Time_Seconds = [
-            isempty(none_row_without) ? 0.0 :
-            none_row_without[1, :avg_synthesis_time_seconds],
-            isempty(none_row_with) ? 0.0 : none_row_with[1, :avg_synthesis_time_seconds]
-        ],
-        Average_Reactions_Synthesized = [
-            isempty(none_rxns_without) ? 0.0 :
-            mean(none_rxns_without.reactions_synthesized),
-            isempty(none_rxns_with) ? 0.0 : mean(none_rxns_with.reactions_synthesized)
-        ]
-    )
-    CSV.write(joinpath(run_dir, "reaction_synthesis_none_comparison.csv"), none_comp_df)
 
     println("\n=======================================================")
     println("✓ Benchmark results successfully recorded!")
