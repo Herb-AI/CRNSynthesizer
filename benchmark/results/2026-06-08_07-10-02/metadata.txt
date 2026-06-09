@@ -1,0 +1,7 @@
+package: synrxn==1.0.0
+task: rbl
+dataset: mbs
+source: github
+version: v1.0.0
+cache: /home/puzzl3dtur7le/.cache/synrxn
+evaluation_script_commit: 09c336fc61fb38509210d733558116b0c100bbd1
