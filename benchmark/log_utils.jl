@@ -454,24 +454,21 @@ function compute_unsynthesised_sizes_df(dataset::String, missing_molecule_synthe
     pct_le_3_with = total_with > 0 ? count(s -> s <= 3, sizes_with) / total_with * 100 : 0.0
     pct_4_6_with = total_with > 0 ? count(s -> 4 <= s <= 6, sizes_with) / total_with * 100 : 0.0
     pct_7_9_with = total_with > 0 ? count(s -> 7 <= s <= 9, sizes_with) / total_with * 100 : 0.0
-    pct_10_13_with = total_with > 0 ? count(s -> 10 <= s <= 13, sizes_with) / total_with * 100 : 0.0
-    pct_ge_14_with = total_with > 0 ? count(s -> s >= 14, sizes_with) / total_with * 100 : 0.0
+    pct_ge_10_with = total_with > 0 ? count(s -> s >= 10, sizes_with) / total_with * 100 : 0.0
 
     pct_le_3_without = total_without > 0 ? count(s -> s <= 3, sizes_without) / total_without * 100 : 0.0
     pct_4_6_without = total_without > 0 ? count(s -> 4 <= s <= 6, sizes_without) / total_without * 100 : 0.0
     pct_7_9_without = total_without > 0 ? count(s -> 7 <= s <= 9, sizes_without) / total_without * 100 : 0.0
-    pct_10_13_without = total_without > 0 ? count(s -> 10 <= s <= 13, sizes_without) / total_without * 100 : 0.0
-    pct_ge_14_without = total_without > 0 ? count(s -> s >= 14, sizes_without) / total_without * 100 : 0.0
+    pct_ge_10_without = total_without > 0 ? count(s -> s >= 10, sizes_without) / total_without * 100 : 0.0
 
     return DataFrame(
-        Symbol("dataset") => [dataset, dataset],
-        Symbol("with fragments or base grammar") => ["base grammar", "with fragments"],
-        Symbol("total number of unsynthesised molecules") => [total_without, total_with],
-        Symbol("percentage of missing molecules with sizes <= 3") => [round(pct_le_3_without; digits=1), round(pct_le_3_with; digits=1)],
-        Symbol("percentage of missing molecules with sizes 4-6") => [round(pct_4_6_without; digits=1), round(pct_4_6_with; digits=1)],
-        Symbol("percentage of missing molecules with sizes 7-9") => [round(pct_7_9_without; digits=1), round(pct_7_9_with; digits=1)],
-        Symbol("percentage of missing molecules with sizes 10-13") => [round(pct_10_13_without; digits=1), round(pct_10_13_with; digits=1)],
-        Symbol("percentage of missing molecules with sizes >= 14") => [round(pct_ge_14_without; digits=1), round(pct_ge_14_with; digits=1)]
+        Symbol("Dataset") => [dataset, dataset],
+        Symbol("Methodology") => ["Base Molecule Grammar", "with BRICS Fragments"],
+        Symbol("TotalUnsynthesised") => [total_without, total_with],
+        Symbol("SizeLE3") => [round(pct_le_3_without; digits=1), round(pct_le_3_with; digits=1)],
+        Symbol("Size4to6") => [round(pct_4_6_without; digits=1), round(pct_4_6_with; digits=1)],
+        Symbol("Size7to9") => [round(pct_7_9_without; digits=1), round(pct_7_9_with; digits=1)],
+        Symbol("SizeGE10") => [round(pct_ge_10_without; digits=1), round(pct_ge_10_with; digits=1)]
     )
 end
 

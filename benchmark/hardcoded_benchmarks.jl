@@ -64,8 +64,8 @@ function run_hardcoded_benchmarks()
 
                 push!(esterification_rows,
                     (
-                        Max_Stage = string(max_stage),
-                        Metric = string(metric),
+                        Max_Stage = titlecase(string(max_stage)),
+                        Metric = metric == :none ? "None" : "Tanimoto w/ Morgan2",
                         Reactions_Synthesised_Until_Target_Reactions = num_rxns_until_target,
                         Networks_Synthesised_Until_Target_Network = num_nets_until_target
                     ))

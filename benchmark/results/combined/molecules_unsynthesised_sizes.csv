@@ -1,9 +1,9 @@
-dataset,with fragments or base grammar,total number of unsynthesised molecules,percentage of missing molecules with sizes <= 3,percentage of missing molecules with sizes 4-6,percentage of missing molecules with sizes 7-9,percentage of missing molecules with sizes 10-13,percentage of missing molecules with sizes >= 14
-complex,base grammar,278,0.0,7.6,45.0,15.8,31.7
-complex,with fragments,220,40.0,17.3,7.7,12.7,22.3
-mbs,base grammar,71,0.0,0.0,98.6,0.0,1.4
-mbs,with fragments,104,74.0,2.9,23.1,0.0,0.0
-mnc,base grammar,46,0.0,84.8,0.0,15.2,0.0
-mnc,with fragments,190,72.6,23.7,0.0,3.7,0.0
-mos,base grammar,416,0.0,3.8,34.1,5.0,57.0
-mos,with fragments,402,59.2,3.2,0.5,4.5,32.6
+Dataset,Methodology,TotalUnsynthesised,SizeLE3,Size4to6,Size7to9,SizeGE10
+complex,Base Molecule Grammar,278,0.0,7.6,45.0,47.5
+complex,with BRICS Fragments,220,40.0,17.3,7.7,35.0
+mbs,Base Molecule Grammar,71,0.0,0.0,98.6,1.4
+mbs,with BRICS Fragments,104,74.0,2.9,23.1,0.0
+mnc,Base Molecule Grammar,46,0.0,84.8,0.0,15.2
+mnc,with BRICS Fragments,190,72.6,23.7,0.0,3.7
+mos,Base Molecule Grammar,416,0.0,3.8,34.1,62.0
+mos,with BRICS Fragments,402,59.2,3.2,0.5,37.1

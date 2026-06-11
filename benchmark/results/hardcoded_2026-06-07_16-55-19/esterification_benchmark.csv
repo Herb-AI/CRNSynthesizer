@@ -1,5 +1,5 @@
 Max_Stage,Metric,Reactions_Synthesised_Until_Target_Reactions,Networks_Synthesised_Until_Target_Network
-reactions,none,22196,N/A
-reactions,tanimoto,19631,N/A
-networks,none,144,435
-networks,tanimoto,118,26
+Reactions,None,22196,N/A
+Reactions,Tanimoto w/ Morgan2,19631,N/A
+Networks,None,144,435
+Networks,Tanimoto w/ Morgan2,118,26
