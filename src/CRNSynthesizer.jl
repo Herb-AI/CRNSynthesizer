@@ -35,6 +35,7 @@ include("interpreters/reaction_interpreter.jl")
 include("interpreters/network_interpreter.jl")
 
 include("iterators/top_down.jl")
+include("iterators/energy_based.jl")
 #include("iterators/bottom_up.jl")
 
 include("synthesizers/molecule_synthesizer.jl")

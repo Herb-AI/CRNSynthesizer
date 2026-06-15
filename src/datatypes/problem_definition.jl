@@ -58,6 +58,10 @@ function preprocess_problem(
 
         # Look for significant changes throughout the profile
         for i in eachindex(profile)[2:end]
+            if profile[i] < 1.0e-5
+                continue # Skip very low values to avoid noise causing false positives
+            end
+
             if profile[i] > profile[i - 1] * 1.2 # 20% increase threshold
                 increases = true
             elseif profile[i] < profile[i - 1] * 0.8  # 20% decrease threshold

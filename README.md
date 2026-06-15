@@ -1,18 +1,51 @@
-# CRNSynthesizer
+# CRNSynthesizer (Energy-Guided Search Extension)
 
-## Purpose
+This code is developed as part of the 2026 Q4 [Research Project](https://github.com/TU-Delft-CSE/Research-Project) of [TU Delft](https://github.com/TU-Delft-CSE).
+
+## About this extension
+
+This project extends [CRNSynthesizer](https://github.com/RichardWijers/CRNSynthesizer) by Richard Wijers.
+
+This extension adds two new search heuristics that use bond-breaking energy to guide the search:
+
+- **Maximum bond-order heuristic** - prioritises reactions with lower maximum bond order in reactants 
+- **Delta energy heuristic** - prioritises reactions with lower net energy change
+
+Both heuristics are benchmarked against baseline breadth-first search across seven CRNs (water formation, methane combustion, photosynthesis, ethylene glycol formation, methyl acetate hydrolysis, esterification, and glucose fermentation).
+
+The full set of experiments comparing these heuristics against BFS is implemented in [`benchmark/heuristics_comparison.jl`](benchmark/heuristics_comparison.jl).
+
+
+### Usage
+
+The new heuristics are used as drop-in replacements for the default iterator in `SynthesizerSettings`. Specify `MaxBond` or `DeltaEnergy` as the `iterator`. For example:
+
+```julia
+synthesis_settings = SynthesizerSettings(;goal = [network_goal], iterator = MaxBond)
+```
+
+See [`benchmark/heuristics_comparison.jl`](benchmark/heuristics_comparison.jl) to see it be implemented
+
+---
+
+This work is an extension of [CRNSynthesizer](https://github.com/RichardWijers/CRNSynthesizer) by Richard Wijers. The original README is reproduced below:
+
+
+## CRNSynthesizer
+
+### Purpose
 Automated discovery of chemical reaction networks based on (partial) measurements.
 
-## Usage
+### Usage
 
-### Installing the Package
+#### Installing the Package
 To install the CRNSynthesizer package, open Julia in the project root directory and enter the package manager by pressing `]`, then run:
 
 ```julia
 dev .
 ```
 
-### Running Benchmarks
+#### Running Benchmarks
 To run the provided benchmarks, use Julia from the command line:
 
 ```sh
@@ -42,5 +75,5 @@ julia your_script.jl
 ``` -->
 
 
-## Looking for more benchmarks
+### Looking for more benchmarks
 Suggestions for additional reaction networks to expand the benchmark suite are very welcome! Please open an issue or pull request if you have ideas or datasets to contribute.

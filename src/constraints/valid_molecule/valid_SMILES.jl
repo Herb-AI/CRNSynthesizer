@@ -1,6 +1,6 @@
 # TODO: check the place of this definition
 # Define chemical properties
-atom_valences = Dict("[O]" => 2, "[H]" => 1, "[C]" => 4, "[N]" => 3)
+atom_valences = Dict("[O]" => 2, "[H]" => 1, "[C]" => 4, "[N]" => 3, "[NAD]" => 2)
 bond_orders = Dict("-" => 1, "=" => 2, "≡" => 3, "≣" => 4)
 digits = Dict(
     "1" => 1, "2" => 2, "3" => 3, "4" => 4, "5" => 5, "6" => 6, "7" => 7, "8" => 8, "9" => 9
@@ -65,7 +65,7 @@ function HerbConstraints.on_new_node(
 end
 
 function is_valid(candidate::Molecule, constraints::ValidSMILES)
-    atom_valences = Dict("O" => 2, "H" => 1, "C" => 4, "N" => 3)
+    atom_valences = Dict("O" => 2, "H" => 1, "C" => 4, "N" => 3, "NAD" => 2)
 
     bond_orders = Dict(single => 1, double => 2, triple => 3, quadruple => 4)
 

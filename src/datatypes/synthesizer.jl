@@ -7,6 +7,8 @@ end
 @data Iterator begin
     BreadthFirst
     DepthFirst
+    MaxBond
+    DeltaEnergy
     BottomUp
 end
 
@@ -54,6 +56,10 @@ function get_iterator(
         DepthFirst => return DFSIterator(
             grammar, starting_symbol, max_depth = settings.max_depth)
         BottomUp => return BUIterator(
+            grammar, starting_symbol, max_depth = settings.max_depth)
+        MaxBond => return MaxBondIterator(
+            grammar, starting_symbol, max_depth = settings.max_depth)
+        DeltaEnergy => return DeltaEnergyIterator(
             grammar, starting_symbol, max_depth = settings.max_depth)
     end
 end

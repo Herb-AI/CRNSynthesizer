@@ -290,11 +290,11 @@ function get_possibilities(
 )
 
     # Test
-    # indices: H => 1, O => 2, N => 3, C => 4
-    atom_indices::Dict{String, Int} = Dict("H" => 1, "O" => 2, "N" => 3, "C" => 4)
+    # indices: H => 1, O => 2, N => 3, C => 4, NAD => 5
+    atom_indices::Dict{String, Int} = Dict("H" => 1, "O" => 2, "N" => 3, "C" => 4, "NAD" => 5)
 
     # Initialize with a single empty option
-    current_options = [(Int[0, 0, 0, 0], Int[])]
+    current_options = [(Int[0, 0, 0, 0, 0], Int[])]
 
     # Process each path
     for path in paths
@@ -346,6 +346,8 @@ function get_possibilities(
                     atom_counts["N"] = count
                 elseif i == 4
                     atom_counts["C"] = count
+                elseif i == 5
+                    atom_counts["NAD"] = count
                 else
                     error("Unexpected atom index: $i")
                 end
