@@ -1,0 +1,2 @@
+task: hardcoded_benchmarks
+evaluation_script_commit: bb89ea85d47213c2ac9fb15d89741ccc40710737
