@@ -30,10 +30,16 @@ function run_hardcoded_benchmarks()
     end
 
     esterification_rows = []
+    similarity_rows = []
 
     for (name, problem) in PROBLEMS
         println("\n-------------------------------------------------------")
         println("\033[1mBenchmarking problem: $name\033[0m")
+
+        for m in problem.goal_molecules
+            score = round(CRNSynthesizer.get_molecule_similarity_score(m, problem.known_molecules, CRNSynthesizer.tanimoto_similarity, nothing); digits=2)
+            push!(similarity_rows, (Missing_Molecule = m.canonical_smiles, Tanimoto_Similarity = score))
+        end
 
         for max_stage in [:reactions, :networks]
             for metric in [:none, :tanimoto]
@@ -76,6 +82,9 @@ function run_hardcoded_benchmarks()
     # Write the CSV file
     if !isempty(esterification_rows)
         CSV.write(joinpath(results_dir, "esterification_benchmark.csv"), DataFrame(esterification_rows))
+    end
+    if !isempty(similarity_rows)
+        CSV.write(joinpath(results_dir, "missing_molecules_similarity.csv"), DataFrame(similarity_rows))
     end
 
     println("Saved hardcoded results & metadata.txt to: $results_dir")
