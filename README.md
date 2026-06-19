@@ -1,5 +1,7 @@
 # CRNSynthesizer
 
+Part of the [Research Project](https://github.com/TU-Delft-CSE/Research-Project) 2026 Q4 at [TU Delft](https://github.com/TU-Delft-CSE).
+
 ## Purpose
 Automated discovery of chemical reaction networks based on (partial) measurements.
 
