@@ -1,0 +1,5 @@
+similarity_metric,use_fragments,evaluated_runs,successful_runs,success_rate,avg_synthesis_time_seconds,total_synthesis_time_seconds
+none,true,500,146,29.2,5.99,2445.87
+tanimoto,true,500,146,29.2,6.16,2463.0
+none,false,500,71,14.2,4.05,1743.69
+tanimoto,false,500,71,14.2,3.94,1713.29

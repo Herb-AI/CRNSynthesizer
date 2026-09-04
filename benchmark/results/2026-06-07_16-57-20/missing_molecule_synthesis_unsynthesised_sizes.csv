@@ -1,0 +1,3 @@
+dataset,with fragments or base grammar,total number of unsynthesised molecules,percentage of missing molecules with sizes <= 3,percentage of missing molecules with sizes 4-6,percentage of missing molecules with sizes 7-9,percentage of missing molecules with sizes 10-13,percentage of missing molecules with sizes >= 14
+complex,base grammar,278,0.0,7.6,45.0,15.8,31.7
+complex,with fragments,220,40.0,17.3,7.7,12.7,22.3

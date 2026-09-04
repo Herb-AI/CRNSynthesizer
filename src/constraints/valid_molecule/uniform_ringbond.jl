@@ -25,7 +25,45 @@ function HerbConstraints.shouldschedule(
         end
     end
 
+    node = get_node_at_location(solver, path)
+    type = get_node_type(solver.grammar, node)
+
+    # If the update was in a fragment that can contain ringbonds,
+    # we need to schedule and recompute the incompatible groups
+    if type == :starting_fragment || (type isa Symbol && endswith(string(type), "_entry"))
+        constraint.ringbond_paths, constraint.connected_groups,
+        _ = get_ringbond_paths(
+            solver, constraint.path)
+        return true
+    end
+
     return false
+end
+
+function get_digit_path(solver::Solver, ringbond_path::Vector{Int})::Vector{Int}
+    node = get_node_at_location(solver, ringbond_path)
+    type = get_node_type(solver.grammar, node)
+
+    if type == :ringbond
+        return push!(copy(ringbond_path), 2)
+    end
+    return push!(copy(ringbond_path), 1)
+end
+
+function get_ringbond_bond_info(
+        solver::Solver, grammar_data::GrammarData, ringbond_path::Vector{Int})
+    ringbond_node = get_node_at_location(solver, ringbond_path)
+    ringbond_type = get_node_type(solver.grammar, ringbond_node)
+
+    if ringbond_type == :ringbond
+        bond_path = push!(copy(ringbond_path), 1)
+        bond_node = get_node_at_location(solver, bond_path)
+        bond_rules = get_rules(bond_node)
+        return bond_path, bond_rules
+    end
+    rule = solver.grammar.rules[HerbCore.get_rule(ringbond_node)]
+    bond_rules = [bond_to_grammar(grammar_data, rule.args[2])]
+    return ringbond_path, bond_rules
 end
 
 function HerbConstraints.propagate!(solver::Solver, constraint::localUniformRingbonds)
@@ -33,24 +71,25 @@ function HerbConstraints.propagate!(solver::Solver, constraint::localUniformRing
     # TODO: make dynamic; TEMP: restrict max ringbonds digit to 9
     max_ringbond_grammar = 2
     # Constraint the max digit of the ringbonds
-    max_ringbonds = length(constraint.ringbond_paths)÷2
-    for (i, (ringbond_path, atom_path)) in enumerate(constraint.ringbond_paths)
+    max_ringbonds = length(constraint.ringbond_paths) ÷ 2
+    for (i, (ringbond_path, _)) in enumerate(constraint.ringbond_paths)
         rule = digit_to_grammar(
             constraint.grammar_data, min(max_ringbonds, max_ringbond_grammar)
         )
         grammar_i = digit_to_grammar(constraint.grammar_data, min(i, max_ringbond_grammar))
-        node = get_node_at_location(solver, push!(copy(ringbond_path), 2))
+        node = get_node_at_location(solver, get_digit_path(solver, ringbond_path))
         if node isa StateHole
             c_remove_above!(
-                solver, push!(copy(ringbond_path), 2), min(rule, grammar_i); fix_point = false
+                solver, get_digit_path(solver, ringbond_path),
+                min(rule, grammar_i); fix_point = false
             )
         end
     end
 
     # Get the filled ringbond digits
-    filled_ringbonds = Dict{Int, Tuple}()
-    for (ringbond_path, atom_path) in constraint.ringbond_paths
-        digit = get_node_at_location(solver, push!(copy(ringbond_path), 2))
+    filled_ringbonds = OrderedDict{Int, Tuple}()
+    for (ringbond_path, _) in constraint.ringbond_paths
+        digit = get_node_at_location(solver, get_digit_path(solver, ringbond_path))
         if isfilled(digit)
             rule = HerbCore.get_rule(digit)
             if haskey(filled_ringbonds, rule)
@@ -67,33 +106,41 @@ function HerbConstraints.propagate!(solver::Solver, constraint::localUniformRing
     end
 
     # If the ringbond digit is the same, they both should have the same bond
-    for (rule, pair) in collect(filled_ringbonds)
+    for (_, pair) in collect(filled_ringbonds)
         if !isnothing(pair[2])
             # Get the bond of the first ringbond
-            left_path = push!(copy(pair[1]), 1)
-            left_node = get_node_at_location(solver, left_path)
-            left_rules = get_rules(left_node)
+            left_path,
+            left_rules = get_ringbond_bond_info(
+                solver, constraint.grammar_data, pair[1])
 
             # Get the bond of the second ringbond
-            right_path = push!(copy(pair[2]), 1)
-            right_node = get_node_at_location(solver, right_path)
-            right_rules = get_rules(right_node)
+            right_path,
+            right_rules = get_ringbond_bond_info(
+                solver, constraint.grammar_data, pair[2])
 
-            # Make their domains equal
-            c_remove_all_but!(solver, left_path, right_rules, false)
-            c_remove_all_but!(solver, right_path, left_rules, false)
+            if isempty(intersect(left_rules, right_rules))
+                HerbConstraints.set_infeasible!(solver)
+            end
+
+            # Make their domains equal (only if the path wasn't mocked)
+            if left_path != pair[1]
+                c_remove_all_but!(solver, left_path, right_rules, false)
+            end
+            if right_path != pair[2]
+                c_remove_all_but!(solver, right_path, left_rules, false)
+            end
         end
     end
 
     # Check that a group should not have the same digits
     for group in constraint.connected_groups
-        seen = Set{Int}()
+        seen = OrderedSet{Int}()
         # println("Group: ", group)
         # Filter empty paths from the group
         group = filter(path -> !isempty(path), group)
         for ringbond_path in group
             # println("Ringbond path: ", ringbond_path)
-            digit = get_node_at_location(solver, push!(copy(ringbond_path), 2))
+            digit = get_node_at_location(solver, get_digit_path(solver, ringbond_path))
             # println("Digit: ", digit)
             if isfilled(digit)
                 rule = HerbCore.get_rule(digit)
@@ -108,9 +155,9 @@ function HerbConstraints.propagate!(solver::Solver, constraint::localUniformRing
     end
 
     # Check that there are no two ringbonds between the same two atoms
-    filled_atoms = Dict{Int, Tuple}()
+    filled_atoms = OrderedDict{Int, Tuple}()
     for (ringbond_path, atom_path) in constraint.ringbond_paths
-        digit = get_node_at_location(solver, push!(copy(ringbond_path), 2))
+        digit = get_node_at_location(solver, get_digit_path(solver, ringbond_path))
         if isfilled(digit)
             rule = HerbCore.get_rule(digit)
             if haskey(filled_atoms, rule)
@@ -126,7 +173,7 @@ function HerbConstraints.propagate!(solver::Solver, constraint::localUniformRing
         end
     end
     # println("Filled atoms: ", filled_atoms)
-    filled_atom_pairs = Dict{Tuple, Int}()
+    filled_atom_pairs = OrderedDict{Tuple, Int}()
     for (rule, (atom1, atom2)) in collect(filled_atoms)
         if !isnothing(atom2)
             highest_atom = max(atom1, atom2)
@@ -141,6 +188,7 @@ function HerbConstraints.propagate!(solver::Solver, constraint::localUniformRing
     end
     # println("Filled pairs: ", filled_atom_pairs)
 end
+
 
 function get_ringbond_paths(
         solver::UniformSolver,
@@ -173,8 +221,8 @@ function get_ringbond_paths(
                     _ = get_ringbond_paths(
                         solver, push!(copy(path), 3), forbidden_group = ringbond_group
                     )
-                    return vcat(chain_ringbonds, structure_ringbonds),
-                    vcat(chain_forbidden, structure_forbidden),
+                    return vcat(structure_ringbonds, chain_ringbonds),
+                    vcat(structure_forbidden, chain_forbidden),
                     []
                 end
                 :(structure * bond *
@@ -189,8 +237,8 @@ function get_ringbond_paths(
                     _ = get_ringbond_paths(
                         solver, push!(copy(path), 3), forbidden_group = ringbond_group
                     )
-                    return vcat(chain_ringbonds, structure_ringbonds),
-                    vcat(chain_forbidden, structure_forbidden),
+                    return vcat(structure_ringbonds, chain_ringbonds),
+                    vcat(structure_forbidden, chain_forbidden),
                     []
                 end
                 :(atom *
@@ -202,6 +250,38 @@ function get_ringbond_paths(
                     forbidden_group = vcat(forbidden_group, [x[1] for x in ringbonds_paths])
                     ringbonds_group = copy([x[1] for x in ringbonds_paths])
                     return ringbonds_paths, [forbidden_group], ringbonds_group
+                end
+                :(structure * "-" *
+                  $fragment_X_entry) => begin
+                    structure_ringbonds, structure_forbidden,
+                    ringbond_group = get_ringbond_paths(
+                        solver,
+                        push!(copy(path), 1),
+                        forbidden_group = forbidden_group
+                    )
+                    fragment_ringbonds, fragment_forbidden,
+                    _ = get_ringbond_paths(
+                        solver, push!(copy(path), 2), forbidden_group = ringbond_group
+                    )
+                    return vcat(structure_ringbonds, fragment_ringbonds),
+                    vcat(structure_forbidden, fragment_forbidden),
+                    []
+                end
+                :(structure * "=" *
+                  $fragment_X_entry) => begin
+                    structure_ringbonds, structure_forbidden,
+                    ringbond_group = get_ringbond_paths(
+                        solver,
+                        push!(copy(path), 1),
+                        forbidden_group = forbidden_group
+                    )
+                    fragment_ringbonds, fragment_forbidden,
+                    _ = get_ringbond_paths(
+                        solver, push!(copy(path), 2), forbidden_group = ringbond_group
+                    )
+                    return vcat(structure_ringbonds, fragment_ringbonds),
+                    vcat(structure_forbidden, fragment_forbidden),
+                    []
                 end
                 _ => throw("Unknown chain rule: $rule")
             end
@@ -267,6 +347,205 @@ function get_ringbond_paths(
             return get_ringbond_paths(
                 solver, push!(copy(path), 2), forbidden_group = forbidden_group
             )
+        end
+        t::Symbol &&
+        if endswith(string(t), "_entry") || startswith(string(t), "starting_")
+        end => begin
+            if !isfilled(node)
+                all_ringbonds = Vector{Tuple{Vector{Int}, Vector{Int}}}()
+                all_forbidden = Vector{Vector{Vector{Int}}}()
+                for child_id in eachindex(node.children)
+                    child_ringbonds, child_forbidden,
+                    _ = get_ringbond_paths(solver, push!(copy(path), child_id))
+                    append!(all_ringbonds, child_ringbonds)
+                    append!(all_forbidden, child_forbidden)
+                end
+                return all_ringbonds, all_forbidden, []
+            end
+            rule = solver.grammar.rules[HerbCore.get_rule(node)]
+            all_ringbonds = Vector{Tuple{Vector{Int}, Vector{Int}}}()
+            all_forbidden = Vector{Vector{Vector{Int}}}()
+            atom_ringbonds = Vector{Tuple{Vector{Int}, Vector{Int}}}()
+            branch_children = Vector{Int}()
+            virtual_atom_count = 0
+            children_count = 0
+
+            # Data structures for tracking matching trailing ringbonds
+            saved_atom_ringbonds = Vector{Vector{Tuple{Vector{Int}, Vector{Int}}}}()
+            digit_to_virtual_atom = OrderedDict{Int, Int}()
+            matching_pairs = Vector{Tuple{Int, Int}}()
+
+            atom_id_counter = 0
+            current_atom_id = 0
+            stack_atom_id = Vector{Int}()
+            atom_holes = Dict{Int, Vector{Vector{Int}}}()
+            parent_atom = Dict{Int, Int}()
+            atom_holes[0] = forbidden_group
+
+            args = rule isa Expr ? rule.args[2:end] : [rule]
+            for arg in args
+                if arg isa String # Parse chunk
+                    if virtual_atom_count > 0 # Ringbonds and children can only be postprocessed
+                        push!(saved_atom_ringbonds, copy(atom_ringbonds))
+                        
+                        chunk_last_atom = current_atom_id # Get id of the last atom in the previous chunk
+                        parent_id = get(parent_atom, chunk_last_atom, 0) # Get its parent id
+                        if parent_id == 0 # If it has no parent, forbid the forbidden group from get_ringbond_paths argument
+                            chunk_fg = forbidden_group
+                        else # Otherwise, forbid the ringbonds from the parent chunk, if applicable
+                            chunk_fg = get(atom_holes, parent_id, Vector{Vector{Int}}())
+                        end
+                        
+                        # Save the ringbonds from this chunk as holes for its children chunks
+                        atom_holes[chunk_last_atom] = [x[1] for x in atom_ringbonds]
+                        # Forbid its connected ringbonds and its parent's connected ringbonds to connect with each other
+                        atom_forbidden = vcat(chunk_fg, atom_holes[chunk_last_atom])
+                        if !isempty(atom_forbidden)
+                            push!(all_forbidden, atom_forbidden)
+                        end
+                        append!(all_ringbonds, atom_ringbonds)
+                        
+                        # Recurse into children of this chunk
+                        for child_id in branch_children
+                            branch_ringbonds, branch_forbidden,
+                            _ = get_ringbond_paths(
+                                solver,
+                                push!(copy(path), child_id),
+                                forbidden_group = atom_holes[chunk_last_atom] # Forbid the child chunk's ringbonds to connect with the current chunk's ringbonds
+                            )
+                            append!(all_ringbonds, branch_ringbonds)
+                            append!(all_forbidden, branch_forbidden)
+                        end
+                        # Clear the ringbonds and branch children for the next chunk
+                        atom_ringbonds = Vector{Tuple{Vector{Int}, Vector{Int}}}()
+                        branch_children = Vector{Int}()
+                    end
+                    
+                    # Keep track of all the atoms and their direct connections
+                    for c in arg
+                        if c == '(' # Save the last atom id in case it was a chunk_last_atom and there are going to be nested children on deeper levels
+                            push!(stack_atom_id, current_atom_id)
+                        elseif c == ')' # Restore the last atom id to keep track of the parent atom
+                            current_atom_id = pop!(stack_atom_id)
+                        elseif c == ']'
+                            atom_id_counter += 1 # ']' marks the end of an atom
+                            parent_atom[atom_id_counter] = current_atom_id # Save the actual parent atom
+                            current_atom_id = atom_id_counter
+                        end
+                    end
+                    
+                    virtual_atom_count += 1
+
+                    # Parse trailing ringbonds
+                    m_suffix = match(r"((?:[-=≡]?\d+)+)$", arg)
+                    if m_suffix !== nothing
+                        suffix = m_suffix.captures[1]
+                        for m_digit in eachmatch(r"\d+", suffix)
+                            digit_val = parse(Int, m_digit.match)
+                            if haskey(digit_to_virtual_atom, digit_val)
+                                prev_v_atom = digit_to_virtual_atom[digit_val]
+                                push!(matching_pairs, (prev_v_atom, virtual_atom_count))
+                            end
+                            digit_to_virtual_atom[digit_val] = virtual_atom_count
+                        end
+                    end
+                else # Parse children of type fragment_X_exit
+                    children_count += 1
+                    child_node = get_node_at_location(
+                        solver, push!(copy(path), children_count))
+                    if !isfilled(child_node)
+                        throw("Unfilled child node at path: $(push!(copy(path), children_count))")
+                        continue
+                    end
+                    child_rule = solver.grammar.rules[HerbCore.get_rule(child_node)]
+                    @match child_rule begin
+                        :("-" * digit) => begin
+                            push!(atom_ringbonds,
+                                (push!(copy(path), children_count),
+                                    push!(copy(path), virtual_atom_count)))
+                        end
+                        :("=" * digit) => begin
+                            push!(atom_ringbonds,
+                                (push!(copy(path), children_count),
+                                    push!(copy(path), virtual_atom_count)))
+                        end
+                        _ => push!(branch_children, children_count)
+                    end
+                end
+            end
+
+            if virtual_atom_count > length(saved_atom_ringbonds)
+                push!(saved_atom_ringbonds, copy(atom_ringbonds))
+            end
+
+            # We can only postprocess the ringbonds after parsing all of the chunk's children
+            # In case there is no trailing chunk in the fragment, we still need to posprocess the ringbonds and children
+            if !isempty(atom_ringbonds) || !isempty(branch_children)
+                chunk_last_atom = current_atom_id # Get id of the last atom in the previous chunk
+                parent_id = get(parent_atom, chunk_last_atom, 0) # Get its parent id
+                if parent_id == 0 # If it has no parent, forbid the forbidden group from get_ringbond_paths argument
+                    chunk_fg = forbidden_group
+                else # Otherwise, forbid the ringbonds from the parent chunk, if applicable
+                    chunk_fg = get(atom_holes, parent_id, Vector{Vector{Int}}())
+                end
+                
+                # Save the ringbonds from this chunk as holes for its children chunks
+                atom_holes[chunk_last_atom] = [x[1] for x in atom_ringbonds]
+                # Forbid its connected ringbonds and its parent's connected ringbonds to connect with each other
+                atom_forbidden = vcat(chunk_fg, atom_holes[chunk_last_atom])
+                if !isempty(atom_forbidden)
+                    push!(all_forbidden, atom_forbidden)
+                end
+                append!(all_ringbonds, atom_ringbonds)
+                
+                # Recurse into children of this chunk
+                for child_id in branch_children
+                    branch_ringbonds, branch_forbidden,
+                    _ = get_ringbond_paths(
+                        solver,
+                        push!(copy(path), child_id),
+                        forbidden_group = atom_holes[chunk_last_atom] # Forbid the child chunk's ringbonds to connect with the current chunk's ringbonds
+                    )
+                    append!(all_ringbonds, branch_ringbonds)
+                    append!(all_forbidden, branch_forbidden)
+                end
+            end
+
+            # Generate forbidden groups for matching pairs to avoid duplicate ringbonds between the same two atoms
+            for (prev_v_atom, curr_v_atom) in matching_pairs
+                forbidden_group_pairs = [x[1]
+                                   for x in vcat(
+                    saved_atom_ringbonds[prev_v_atom], saved_atom_ringbonds[curr_v_atom])]
+                if !isempty(forbidden_group_pairs)
+                    push!(all_forbidden, forbidden_group_pairs)
+                end
+            end
+
+            return all_ringbonds, all_forbidden, []
+        end
+        t::Symbol && if endswith(string(t), "_exit")
+        end => begin
+            rule = solver.grammar.rules[HerbCore.get_rule(node)]
+            @match rule begin
+                :("(-" * chain * ")") => begin
+                    return get_ringbond_paths(
+                        solver, push!(copy(path), 1), forbidden_group = forbidden_group)
+                end
+                :("(=" * chain * ")") => begin
+                    return get_ringbond_paths(
+                        solver, push!(copy(path), 1), forbidden_group = forbidden_group)
+                end
+                # Push temporary ringbond path to check for parity of ringbonds in the molecule
+                # The correct path will be updated when fragment_X_entry/starting_fragment is filled
+                :("-" * digit) => begin
+                    return [(copy(path), [-1])], [], []
+                end
+                :("=" * digit) => begin
+                    return [(copy(path), [-1])], [], []
+                end
+                _ => return get_ringbond_paths(
+                    solver, push!(copy(path), 2), forbidden_group = forbidden_group)
+            end
         end
         _ => throw("Unknown node type: $type")
     end

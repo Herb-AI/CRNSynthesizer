@@ -1,0 +1,3 @@
+Similarity_Metric,Success_Rate_Without_Fragments_Percentage,Successful_Runs_Without_Fragments,Success_Rate_With_Fragments_Percentage,Successful_Runs_With_Fragments
+none,86.8,434,62.8,314
+tanimoto,86.8,434,62.8,314

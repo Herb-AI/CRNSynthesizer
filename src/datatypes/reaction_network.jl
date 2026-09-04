@@ -3,14 +3,19 @@ struct Reaction
     inputs::Vector{Tuple{Int, Molecule}}
     outputs::Vector{Tuple{Int, Molecule}}
     ignore_balanced::Bool
+
+    function Reaction(
+            rate::Union{Nothing, Float64},
+            inputs::Vector{Tuple{Int, Molecule}},
+            outputs::Vector{Tuple{Int, Molecule}},
+            ignore_balanced::Bool = false
+    )
+        sorted_inputs = sort(inputs; by = x -> x[2].canonical_smiles)
+        sorted_outputs = sort(outputs; by = x -> x[2].canonical_smiles)
+        new(rate, sorted_inputs, sorted_outputs, ignore_balanced)
+    end
 end
-function Reaction(
-        rate::Union{Nothing, Float64},
-        inputs::Vector{Tuple{Int, Molecule}},
-        outputs::Vector{Tuple{Int, Molecule}}
-)
-    Reaction(rate, inputs, outputs, false)
-end
+
 function Reaction(
         inputs::Vector{Tuple{Int, Molecule}}, outputs::Vector{Tuple{Int, Molecule}})
     Reaction(nothing, inputs, outputs, false)
@@ -21,8 +26,8 @@ import Base: hash, ==
 function hash(reaction::Reaction, h::UInt)
     h = hash(reaction.rate, h)
     # Sort inputs and outputs to make hash order-insensitive
-    sorted_inputs = sort(reaction.inputs; by = x -> to_SMILES(x[2]))
-    sorted_outputs = sort(reaction.outputs; by = x -> to_SMILES(x[2]))
+    sorted_inputs = sort(reaction.inputs; by = x -> x[2].canonical_smiles)
+    sorted_outputs = sort(reaction.outputs; by = x -> x[2].canonical_smiles)
     for (count, molecule) in sorted_inputs
         h = hash((count, molecule), h)
     end
@@ -41,15 +46,15 @@ function ==(a::Reaction, b::Reaction)
     end
 
     # Compare inputs (order-insensitive)
-    inputs_a = sort(a.inputs; by = x -> to_SMILES(x[2]))
-    inputs_b = sort(b.inputs; by = x -> to_SMILES(x[2]))
+    inputs_a = sort(a.inputs; by = x -> x[2].canonical_smiles)
+    inputs_b = sort(b.inputs; by = x -> x[2].canonical_smiles)
     if inputs_a != inputs_b
         return false
     end
 
     # Compare outputs (order-insensitive)
-    outputs_a = sort(a.outputs; by = x -> to_SMILES(x[2]))
-    outputs_b = sort(b.outputs; by = x -> to_SMILES(x[2]))
+    outputs_a = sort(a.outputs; by = x -> x[2].canonical_smiles)
+    outputs_b = sort(b.outputs; by = x -> x[2].canonical_smiles)
     if outputs_a != outputs_b
         return false
     end
@@ -58,7 +63,7 @@ function ==(a::Reaction, b::Reaction)
 end
 
 function Reaction(inputs::Vector{Molecule}, outputs::Vector{Molecule})
-    input_dict = Dict{Molecule, Int}()
+    input_dict = OrderedDict{Molecule, Int}()
     for (i, input) in enumerate(inputs)
         if haskey(input_dict, input)
             input_dict[input] += 1
@@ -68,7 +73,7 @@ function Reaction(inputs::Vector{Molecule}, outputs::Vector{Molecule})
     end
     inputs = [(input_dict[input], input) for input in keys(input_dict)]
 
-    output_dict = Dict{Molecule, Int}()
+    output_dict = OrderedDict{Molecule, Int}()
     for (i, output) in enumerate(outputs)
         if haskey(output_dict, output)
             output_dict[output] += 1
@@ -90,7 +95,7 @@ function get_reactions(network::ReactionNetwork)
 end
 
 function get_molecules(network::ReactionNetwork)::Vector{Molecule}
-    molecules = Set{Molecule}()
+    molecules = OrderedSet{Molecule}()
     for reaction in network.reactions
         for (count, molecule) in reaction.inputs
             push!(molecules, molecule)
@@ -99,25 +104,25 @@ function get_molecules(network::ReactionNetwork)::Vector{Molecule}
             push!(molecules, molecule)
         end
     end
-    return collect(molecules)
+    return sort(collect(molecules); by = m -> m.canonical_smiles)
 end
 
-function get_atoms(network::ReactionNetwork)
-    atoms = Set{Atom}()
+#=function get_atoms(network::ReactionNetwork)::Vector{String}
+    atoms = Set{String}()
     for reaction in network.reactions
         for (count, molecule) in reaction.inputs
             for atom in molecule.atoms
-                push!(atoms, atom)
+                push!(atoms, atom.name)
             end
         end
         for (count, molecule) in reaction.outputs
             for atom in molecule.atoms
-                push!(atoms, atom)
+                push!(atoms, atom.name)
             end
         end
     end
     return collect(atoms)
-end
+end=#
 
 import Base.==
 function ==(a::ReactionNetwork, b::ReactionNetwork)
@@ -304,7 +309,7 @@ end
 
 function count_species(network)
     # Count the number of unique species in the network
-    unique_species = Set{Molecule}()
+    unique_species = OrderedSet{Molecule}()
     for reaction in network.reactions
         for input in reaction.inputs
             push!(unique_species, input[2])
@@ -321,27 +326,36 @@ function count_reactions(network)
     return length(network.reactions)
 end
 
-function compare(mol1, mol2)
-    # Compare two molecules and return a score based on the number of matching atoms
-    # This is a placeholder function; a better comparison would consider atom positions, bonds, etc.
-    return length(intersect(mol1.atoms, mol2.atoms))
+function get_bond_inventory(molecules)
+    inventory = Dict{String, Int}()
+
+    for (number, mol) in molecules
+        for bond in mol.bonds
+            atom1 = string(mol.atoms[bond.from].name)
+            atom2 = string(mol.atoms[bond.to].name)
+
+            pair = sort([atom1, atom2])
+            bond_str = "$(pair[1])$(bond.bond_type)$(pair[2])"
+
+            inventory[bond_str] = get(inventory, bond_str, 0) + number
+        end
+    end
+    return inventory
 end
 
 function bonds_changed(reaction)
-    inputs = reaction.inputs
-    outputs = reaction.outputs
+    input_inventory = get_bond_inventory(reaction.inputs)
+    output_inventory = get_bond_inventory(reaction.outputs)
+
+    all_bond_types = union(keys(input_inventory), keys(output_inventory))
 
     score = 0
-    for input in inputs
-        min_match = Inf
-        for output in outputs
-            comparison = compare(input[2], output[2])
-            if comparison < min_match
-                min_match = comparison
-            end
-        end
-        score += min_match
+    for bond_type in all_bond_types
+        in_count = get(input_inventory, bond_type, 0)
+        out_count = get(output_inventory, bond_type, 0)
+
+        score += abs(in_count - out_count)
     end
 
-    return score
+    return score ÷ 2
 end

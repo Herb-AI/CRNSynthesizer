@@ -1,8 +1,7 @@
 function synthesize_networks(
-        atoms::Vector{Atom}, settings::SynthesizerSettings;
-        problem = ProblemDefinition()
+        atom_valences::OrderedDict{String, Int}, settings::SynthesizerSettings, problem::ProblemDefinition
 )::Vector{ReactionNetwork}
-    grammar = network_grammar(atoms; problem = problem, settings = settings)
+    grammar = network_grammar(atom_valences, problem; settings = settings)
     iterator = get_iterator(settings, grammar, :network)
     interpreter = x -> interpret_network(x, grammar)
 
@@ -18,14 +17,18 @@ end
 
 function synthesize_networks(
         molecules::Vector{Molecule},
-        settings::SynthesizerSettings;
-        problem = ProblemDefinition(),
+        settings::SynthesizerSettings,
+        problem::ProblemDefinition;
         job = nothing
 )::Vector{ReactionNetwork}
     molecules = filter(molecules) do molecule
         return !(molecule in problem.known_molecules)
     end
-    grammar = network_grammar(molecules; problem = problem, settings = settings)
+    metric_name = get(settings.options, :similarity_metric, :none)
+    grammar = network_grammar(
+        sort_molecules_by_similarity(molecules, problem.known_molecules; metric_name = metric_name),
+        problem;
+        settings = settings)
 
     iterator = get_iterator(settings, grammar, :network)
     interpreter = x -> interpret_network(x, grammar)
@@ -41,10 +44,13 @@ function synthesize_networks(
 end
 
 function synthesize_networks(
-        reactions::Vector{Reaction}, settings::SynthesizerSettings;
-        problem = ProblemDefinition()
+        reactions::Vector{Reaction}, settings::SynthesizerSettings, problem::ProblemDefinition
 )::Vector{ReactionNetwork}
-    grammar = network_grammar(reactions; problem = problem, settings = settings)
+    metric_name = get(settings.options, :similarity_metric, :none)
+    grammar = network_grammar(
+        sort_reactions_by_similarity(reactions, problem.known_molecules; metric_name = metric_name),
+        problem;
+        settings = settings)
     iterator = get_iterator(settings, grammar, :network)
     interpreter = x -> interpret_network(x, grammar)
 
@@ -61,7 +67,7 @@ end
 function synthesize_networks(
         problem::ProblemDefinition, settings::SynthesizerSettings
 )::Vector{ReactionNetwork}
-    return synthesize_networks(get_atoms(problem), settings; problem = problem)
+    return synthesize_networks(problem.atom_valences, settings, problem)
 end
 
 function synthesize_networks(
@@ -69,7 +75,9 @@ function synthesize_networks(
         molecule_settings::SynthesizerSettings,
         network_settings::SynthesizerSettings;
         initial_molecules_count::Int = 100,
-        pbar = nothing
+        pbar = nothing,
+        fragment_rules::OrderedDict{Int, Vector{Expr}} = OrderedDict{Int, Vector{Expr}}(),
+        starting_fragments::Vector{Expr} = Expr[]
 )
     molecule_job = nothing
     network_job = nothing
@@ -79,24 +87,25 @@ function synthesize_networks(
     end
 
     start_time = time()
-
-    molecules = Set{Molecule}()
-    molecule_grammar = SMILES_grammar(get_atoms(problem))
+    molecules = OrderedSet{Molecule}()
+    metric_name = get(network_settings.options, :similarity_metric, :none)
+    molecule_grammar = SMILES_grammar(
+        problem.atom_valences; fragment_rules = fragment_rules,
+        starting_fragments = starting_fragments)
     molecule_iterator = get_iterator(molecule_settings, molecule_grammar, :molecule)
 
     networks = Vector{ReactionNetwork}()
+    molecule_score_cache = Dict{Molecule, Float64}()
 
     stop_condition = false
     for molecule_program in molecule_iterator
         molecule = interpret_molecule(molecule_program, molecule_grammar)
 
-        if !(molecule in problem.known_molecules)
-            push!(molecules, molecule)
+        push!(molecules, molecule)
 
-            if !isnothing(pbar)
-                update!(molecule_job)
-                yield()
-            end
+        if !isnothing(pbar)
+            update!(molecule_job)
+            yield()
         end
 
         if length(molecules) < initial_molecules_count &&
@@ -105,7 +114,8 @@ function synthesize_networks(
         end
 
         networks_grammar = network_grammar(
-            collect(molecules); problem = problem, settings = network_settings
+            sort_molecules_by_similarity(collect(molecules), problem.known_molecules;
+                metric_name = metric_name, cache = molecule_score_cache), problem; settings = network_settings
         )
         network_iterator = get_iterator(network_settings, networks_grammar, :network)
         for network_program in network_iterator
@@ -159,16 +169,24 @@ function synthesize_networks_2(
 
     start_time = time()
 
-    reactions = Set{Reaction}()
+    reactions = OrderedSet{Reaction}()
+    metric_name = get(network_settings.options, :similarity_metric, :simpson)
+
     reactions_grammar = reaction_grammar(get_atoms(problem); settings = reaction_settings)
     reaction_iterator = get_iterator(reaction_settings, reactions_grammar, :reaction)
 
     networks = Vector{ReactionNetwork}()
+    reaction_score_cache = Dict{Reaction, Float64}()
+    molecule_score_cache = Dict{Molecule, Float64}()
 
     stop_condition = false
     for reaction_program in reaction_iterator
         reaction = interpret_reaction(reaction_program, reactions_grammar)
+        if reaction in reactions
+            continue
+        end
         push!(reactions, reaction)
+
         if !isnothing(pbar)
             update!(reaction_job)
             yield()
@@ -179,7 +197,9 @@ function synthesize_networks_2(
         end
 
         networks_grammar = network_grammar(
-            collect(reactions); problem = problem, settings = network_settings
+            sort_reactions_by_similarity(collect(reactions), problem.known_molecules;
+                metric_name = metric_name,
+                cache = reaction_score_cache, molecule_cache = molecule_score_cache), problem; settings = network_settings
         )
         network_iterator = get_iterator(network_settings, networks_grammar, :network)
         for network_program in network_iterator
@@ -224,27 +244,31 @@ function synthesize_networks(
         network_settings::SynthesizerSettings;
         initial_molecules_count::Int = 10,
         initial_reactions_count::Int = 1000,
-        pbar = nothing
+        pbar = nothing,
+        fragment_rules::OrderedDict{Int, Vector{Expr}} = OrderedDict{Int, Vector{Expr}}(),
+        starting_fragments::Vector{Expr} = Expr[]
 )
     start_time = time()
 
-    molecules = Set{Molecule}()
+    molecules = OrderedSet{Molecule}()
+    metric_name = get(network_settings.options, :similarity_metric, :none)
+
     for molecule in problem.known_molecules
-        push!(molecules, molecule)
-    end
-    for molecule in get_molecules(problem)
         push!(molecules, molecule)
     end
     check_stop_condition(
         molecule_settings, start_time, molecules, nothing; check_all_candidates = true
     )
 
-    molecule_grammar = SMILES_grammar(get_atoms(problem))
+    molecule_grammar = SMILES_grammar(problem.atom_valences; settings = molecule_settings,
+        fragment_rules = fragment_rules, starting_fragments = starting_fragments)
     molecule_iterator = get_iterator(molecule_settings, molecule_grammar, :molecule)
 
-    reactions = Vector{Reaction}()
-
+    reactions = OrderedSet{Reaction}()
     networks = Vector{ReactionNetwork}()
+
+    molecule_score_cache = Dict{Molecule, Float64}()
+    reaction_score_cache = Dict{Reaction, Float64}()
 
     stop_condition = false
     for molecule_program in molecule_iterator
@@ -256,11 +280,23 @@ function synthesize_networks(
             continue
         end
 
+        pool_molecules = sort_molecules_by_similarity(
+            collect(molecules), problem.known_molecules;
+            metric_name = metric_name, cache = molecule_score_cache)
+        if !isnothing(problem.partial_reaction)
+            partial_mols = get_reaction_molecules(problem.partial_reaction)
+            pool_molecules = filter(m -> !(m in partial_mols), pool_molecules)
+        end
+
         reactions_grammar = reaction_grammar(
-            collect(molecules); settings = reaction_settings)
+            pool_molecules; settings = reaction_settings, partial_reaction = problem.partial_reaction
+        )
         reaction_iterator = get_iterator(reaction_settings, reactions_grammar, :reaction)
         for reaction_program in reaction_iterator
             reaction = interpret_reaction(reaction_program, reactions_grammar)
+            if reaction in reactions
+                continue
+            end
             push!(reactions, reaction)
 
             # molecules = Set(synthesize_molecules(get_atoms(problem), molecule_settings))
@@ -278,7 +314,9 @@ function synthesize_networks(
             # println("Found $(length(reactions)) reactions so far.")
 
             networks_grammar = network_grammar(
-                collect(reactions); problem = problem, settings = network_settings
+                sort_reactions_by_similarity(collect(reactions), problem.known_molecules;
+                    metric_name = metric_name,
+                    cache = reaction_score_cache, molecule_cache = molecule_score_cache), problem; settings = network_settings
             )
             network_iterator = get_iterator(network_settings, networks_grammar, :network)
             for network_program in network_iterator
@@ -313,3 +351,5 @@ function synthesize_networks(
     return networks, reactions, molecules
     # return networks
 end
+
+# Similarity and sorting functions moved to similarity.jl

@@ -13,20 +13,18 @@ function convert_to_subscript(name::String)
         '9' => '₉'
     )
     result = ""
-    i = 1
-    while i ≤ length(name)
-        if isdigit(name[i])
-            result *= subscript_map[name[i]]
+    for c in name
+        if isdigit(c)
+            result *= subscript_map[c]
         else
-            result *= name[i]
+            result *= string(c)
         end
-        i += 1
     end
     return result
 end
 
 function remove_all!(a::Vector{Vector{Int}}, item::Vector{Int})
-    deleteat!(a, findall(x->x==item, a))
+    deleteat!(a, findall(x -> x==item, a))
 end
 
 #########################################

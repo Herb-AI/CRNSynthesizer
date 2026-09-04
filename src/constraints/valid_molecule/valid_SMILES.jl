@@ -1,20 +1,21 @@
 # TODO: check the place of this definition
 # Define chemical properties
-atom_valences = Dict("[O]" => 2, "[H]" => 1, "[C]" => 4, "[N]" => 3)
-bond_orders = Dict("-" => 1, "=" => 2, "≡" => 3, "≣" => 4)
 digits = Dict(
-    "1" => 1, "2" => 2, "3" => 3, "4" => 4, "5" => 5, "6" => 6, "7" => 7, "8" => 8, "9" => 9
+    "1" => 1, "2" => 2, "3" => 3, "4" => 4, "5" => 5, "6" => 6, "7" => 7, "8" => 8, "9" =>
+        9
 )
 
 struct ValidSMILES <: AbstractGrammarConstraint
     grammar_data::GrammarData
+    atom_valences::OrderedDict{String, Int}
 end
 
-function ValidSMILES(grammar::ContextSensitiveGrammar)
-    atom_dict, bond_dict = generate_atom_bond_dicts(grammar)
-    digit_to_grammar = generate_digit_to_grammar(grammar)
-    grammar_data = GrammarData(atom_dict, bond_dict, digit_to_grammar)
-    return ValidSMILES(grammar_data)
+function ValidSMILES(grammar::ContextSensitiveGrammar, atom_valences::OrderedDict{
+        String, Int})
+    atom_dict, bond_dict = generate_atom_bond_dicts(grammar, atom_valences)
+    digit_to_grammar, bond_to_grammar = generate_digit_bond_to_grammar(grammar)
+    grammar_data = GrammarData(atom_dict, bond_dict, digit_to_grammar, bond_to_grammar)
+    return ValidSMILES(grammar_data, atom_valences)
 end
 
 function HerbCore.is_domain_valid(constraint::ValidSMILES, grammar::ContextSensitiveGrammar)
@@ -65,26 +66,28 @@ function HerbConstraints.on_new_node(
 end
 
 function is_valid(candidate::Molecule, constraints::ValidSMILES)
-    atom_valences = Dict("O" => 2, "H" => 1, "C" => 4, "N" => 3)
-
-    bond_orders = Dict(single => 1, double => 2, triple => 3, quadruple => 4)
+    bond_orders = Dict(
+        single => 1.0, aromatic => 1.5, double => 2.0, triple => 3.0, quadruple => 4.0)
 
     atoms = candidate.atoms
     bonds = candidate.bonds
 
     for (atom_index, atom) in enumerate(atoms)
         atom_str = atom.name
-        if !haskey(atom_valences, atom_str)
+        if !haskey(constraints.atom_valences, atom_str)
             return false
         end
-
-        valence = atom_valences[atom_str]
+        valence = constraints.atom_valences[atom_str]
         connected_bonds = filter(b -> b.from == atom_index || b.to == atom_index, bonds)
         if isempty(connected_bonds)
-            return false
+            if valence == 0
+                continue
+            else
+                return false
+            end
         end
-        total_bond_order = sum(bond_orders[b.bond_type] for b in connected_bonds)
-
+        total_bond_order = round(Int, sum(bond_orders[b.bond_type]
+        for b in connected_bonds))
         if total_bond_order != valence
             return false
         end

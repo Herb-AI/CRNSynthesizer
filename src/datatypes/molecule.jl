@@ -1,10 +1,12 @@
-@enum BondType single double triple quadruple
+@enum BondType single double aromatic triple quadruple
 
 function to_string(bond_type::BondType)::String
     return if bond_type == single
         "-"
     elseif bond_type == double
         "="
+    elseif bond_type == aromatic
+        ":"
     elseif bond_type == triple
         "≡"
     else
@@ -14,6 +16,8 @@ end
 
 struct Atom
     name::String
+    is_aromatic::Bool
+    Atom(name::String, is_aromatic::Bool = false) = new(name, is_aromatic)
 end
 
 abstract type AbstractBond end
@@ -32,8 +36,12 @@ end
 struct Molecule
     atoms::Vector{Atom}
     bonds::Vector{AbstractBond}
+    canonical_smiles::String
+    fingerprint::Vector{UInt8}
+    morgan_fingerprint::Vector{UInt8}
 
-    function Molecule(atoms::Vector{Atom}, bonds::Vector{Bond})
+    function Molecule(atoms::Vector{Atom}, bonds::Vector{Bond}, canonical_smiles::String,
+            fingerprint::Vector{UInt8}, morgan_fingerprint::Vector{UInt8} = UInt8[])
         # Create a copy of atoms and sort them
         sorted_indices = sortperm(atoms; by = atom -> atom.name)
         sorted_atoms = atoms[sorted_indices]
@@ -57,7 +65,8 @@ struct Molecule
         # Sort the bonds by the new atom indices
         sort!(adjusted_bonds; by = bond -> (bond.from, bond.to))
 
-        return new(sorted_atoms, adjusted_bonds)
+        return new(
+            sorted_atoms, adjusted_bonds, canonical_smiles, fingerprint, morgan_fingerprint)
     end
 end
 
@@ -68,7 +77,7 @@ function ==(a::Molecule, b::Molecule)
         return false
     end
 
-    if to_SMILES(a) != to_SMILES(b)
+    if a.canonical_smiles != b.canonical_smiles
         return false
     end
 
@@ -79,7 +88,7 @@ import Base.hash
 function hash(m::Molecule, h::UInt)
     h = hash(:Molecule, h)
     # println("Hashing molecule: ", m)
-    h = hash(to_SMILES(m), h)
+    h = hash(m.canonical_smiles, h)
     return h
 end
 
@@ -111,10 +120,82 @@ end
 
 function count_atoms(molecule::Molecule)::Dict{String, Int}
     atoms = Dict{String, Int}()
+    net_charge = 0
     for atom in molecule.atoms
-        atoms[atom.name] = get(atoms, atom.name, 0) + 1
+        # Expected format: [ElementCharge]
+        m = match(r"^\[([A-Z][a-z]?)(.*)\]$", atom.name)
+        if m !== nothing
+            element = m.captures[1]
+            charge_str = m.captures[2]
+
+            atoms[element] = get(atoms, element, 0) + 1
+
+            if !isempty(charge_str)
+                sign = occursin("-", charge_str) ? -1 : 1
+                num_str = filter(isdigit, charge_str)
+                val = isempty(num_str) ?
+                      length(filter(c -> c == '+' || c == '-', charge_str)) :
+                      parse(Int, num_str)
+                net_charge += sign * val
+            end
+        else
+            atoms[atom.name] = get(atoms, atom.name, 0) + 1
+        end
     end
+
+    if net_charge != 0
+        atoms["charge"] = net_charge
+    end
+
     return atoms
+end
+
+function get_valences_from_molecules(molecules::Vector{Molecule})::OrderedDict{String, Int}
+    valences = OrderedDict{String, Int}()
+
+    for mol in molecules
+        # Check if we need to parse this molecule
+        needs_parsing = false
+        for atom in mol.atoms
+            if !haskey(valences, atom.name)
+                needs_parsing = true
+                break
+            end
+        end
+
+        if !needs_parsing
+            continue
+        end
+
+        if isempty(mol.canonical_smiles)
+            throw(ArgumentError(string("Invalid input molecule: ", to_SMILES(mol))))
+        end
+
+        mf_mol = MoleculeFlow.mol_from_smiles(mol.canonical_smiles)
+        if isnothing(mf_mol) || !mf_mol.valid
+            throw(ArgumentError(string("Invalid input molecule: ", to_SMILES(mol))))
+        end
+        mf_mol = MoleculeFlow.add_hs(mf_mol)
+
+        for a in MoleculeFlow.get_atoms(mf_mol)
+            symbol = MoleculeFlow.get_symbol(a)
+            charge = MoleculeFlow.get_formal_charge(a)
+
+            name = if charge == 0
+                "[$symbol]"
+            elseif charge == 1
+                "[$symbol+]"
+            elseif charge == -1
+                "[$symbol-]"
+            elseif charge > 1
+                "[$symbol+$charge]"
+            else
+                "[$symbol$charge]"
+            end
+            valences[name] = MoleculeFlow.get_valence(a)
+        end
+    end
+    return valences
 end
 
 function to_compact(molecule::Molecule)
@@ -123,7 +204,7 @@ function to_compact(molecule::Molecule)
 
     # Convert the compact representation to a string
     compact_str = ""
-    for (atom_name, count) in atoms
+    for (atom_name, count) in sort(collect(atoms); by = x -> x[1])
         if count > 1
             compact_str *= "$atom_name$count"
         else
@@ -140,7 +221,8 @@ function from_SMILES(smiles::String)
     atom_matches = collect(eachmatch(r"\[(.*?)\]", smiles))
     for regmatch::RegexMatch in atom_matches
         atom_name = regmatch.captures[1]  # Get the content inside brackets
-        push!(atoms, Atom(atom_name))
+        is_aromatic = islowercase(atom_name[1])
+        push!(atoms, Atom("[" * uppercasefirst(atom_name) * "]", is_aromatic))
     end
 
     # Replace atoms with placeholders for easier parsing
@@ -187,6 +269,8 @@ function from_SMILES(smiles::String)
         elseif char == '='
             # Double bond
             current_bond_type = double
+        elseif char == ':'
+            current_bond_type = aromatic
         elseif char == '#'
             # Triple bond
             current_bond_type = triple
@@ -207,9 +291,24 @@ function from_SMILES(smiles::String)
             if !isempty(branch_stack)
                 current_atom_idx = pop!(branch_stack)
             end
-        elseif isdigit(char)
+        elseif char == '%' || isdigit(char)
             # Ring closure
-            ring_num = parse(Int, string(char))
+            if char == '%'
+                # Find all subsequent digits
+                j = nextind(processed_smiles, i)
+                while j <= lastindex(processed_smiles) && isdigit(processed_smiles[j])
+                    j = nextind(processed_smiles, j)
+                end
+
+                # Extract the multi-digit number
+                ring_str = processed_smiles[nextind(
+                    processed_smiles, i):prevind(processed_smiles, j)]
+                ring_num = parse(Int, ring_str)
+
+                i = prevind(processed_smiles, j)
+            else
+                ring_num = parse(Int, string(char))
+            end
 
             if haskey(ring_connections, ring_num)
                 # Close the ring
@@ -231,7 +330,16 @@ function from_SMILES(smiles::String)
         i = nextind(processed_smiles, i)
     end
 
-    return Molecule(atoms, bonds)
+    mol = RDKitMinimalLib.get_mol(replace(smiles, "≡" => "#"))
+    if isnothing(mol)
+        throw(ArgumentError("Invalid molecule: $smiles"))
+    end
+    canonical_smiles = isnothing(mol) ? smiles : RDKitMinimalLib.get_smiles(mol)
+    fingerprint = isnothing(mol) ? UInt8[] : RDKitMinimalLib.get_rdkit_fp_as_bytes(mol)
+    morgan_fingerprint = isnothing(mol) ? UInt8[] :
+                         RDKitMinimalLib.get_morgan_fp_as_bytes(
+        mol, Dict{String, Any}("radius" => 2, "nBits" => 1024))
+    return Molecule(atoms, bonds, canonical_smiles, fingerprint, morgan_fingerprint)
 end
 
 function to_SMILES(molecule::Molecule)::String
@@ -240,7 +348,9 @@ function to_SMILES(molecule::Molecule)::String
     end
 
     if length(molecule.atoms) == 1
-        return "[" * molecule.atoms[1].name * "]"
+        atom = molecule.atoms[1]
+        atom_name_str = atom.is_aromatic ? lowercase(atom.name) : atom.name
+        return atom_name_str
     end
 
     # Create an adjacency and ringbond dict
@@ -309,11 +419,21 @@ function to_SMILES(molecule::Molecule)::String
     end
 
     function to_SMILES(atom_idx)
-        result = "[" * molecule.atoms[atom_idx].name * "]"
+        atom = molecule.atoms[atom_idx]
+        atom_name_str = atom.is_aromatic ? lowercase(atom.name) : atom.name
+        result = atom_name_str
 
         if haskey(ringbonds, atom_idx)
             for ringbond in ringbonds[atom_idx]
-                result *= ringbond[2] * string(ringbond[1])
+                ring_num = ringbond[1]
+                bond_str = ringbond[2]
+
+                # Prepend '%' if the ring number is double-digit
+                if ring_num > 9
+                    result *= bond_str * "%" * string(ring_num)
+                else
+                    result *= bond_str * string(ring_num)
+                end
             end
         end
 

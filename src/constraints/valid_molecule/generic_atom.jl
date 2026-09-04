@@ -39,7 +39,8 @@ function HerbConstraints.shouldschedule(
                type == :branch ||
                type == :branches ||
                type == :molecule_list ||
-               type == :molecule
+               type == :molecule ||
+               startswith(string(type), "fragment")
            )
            )
 end
@@ -129,10 +130,30 @@ function propagate_atoms!(
 
     # Check if the node has children we can propagate to
     if isuniform(node)
+        if !isfilled(node)
+            return
+        end
         rule = HerbCore.get_rule(node)
+        if type == :starting_fragment || endswith(string(type), "_entry")
+            for i in eachindex(node.children)
+                propagate_atoms!(solver, constraint, push!(copy(path), i))
+            end
+            return
+        elseif endswith(string(type), "_exit")
+            rule = solver.grammar.rules[rule]
+            if rule == :("(-" * chain * ")") || rule == :("(=" * chain * ")")
+                propagate_atoms!(
+                    solver, constraint, push!(copy(path), 1), bond_paths = [copy(path)])
+            elseif :special_bond in rule.args || :special_double_bond in rule.args
+                propagate_atoms!(solver, constraint, push!(copy(path), 2))
+            end
+            return
+        end
+
         @match solver.grammar.rules[rule] begin
             # Main molecule rule with one child
             :chain => propagate_atoms!(solver, constraint, push!(copy(path), 1))
+            :starting_fragment => propagate_atoms!(solver, constraint, push!(copy(path), 1))
             :(from_SMILES(chain)) => propagate_atoms!(
                 solver, constraint, push!(copy(path), 1))
 
@@ -187,6 +208,24 @@ function propagate_atoms!(
                     push!(copy(path), 3),
                     bond_paths = [push!(copy(path), 2)]
                 )
+            end
+
+            :(structure * "-" * $fragment_X_entry) => begin
+                bond_paths = push!(copy(bond_paths), push!(copy(path), 2))
+                propagate_atoms!(
+                    solver, constraint, push!(copy(path), 1),
+                    bond_paths = bond_paths, holes = holes
+                )
+                propagate_atoms!(solver, constraint, push!(copy(path), 2))
+            end
+
+            :(structure * "=" * $fragment_X_entry) => begin
+                bond_paths = push!(copy(bond_paths), push!(copy(path), 2))
+                propagate_atoms!(
+                    solver, constraint, push!(copy(path), 1),
+                    bond_paths = bond_paths, holes = holes
+                )
+                propagate_atoms!(solver, constraint, push!(copy(path), 2))
             end
 
             # Structure option with three children
@@ -247,7 +286,7 @@ function propagate_atom!(
         return nothing
     end
 
-    if length_bonds + length_holes == 0
+    if min_connections > 0 && length_bonds + length_holes == 0
         HerbConstraints.set_infeasible!(solver)
         # println("infeasible")
         return nothing

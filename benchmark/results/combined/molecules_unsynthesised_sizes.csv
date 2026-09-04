@@ -1,0 +1,9 @@
+Dataset,Methodology,TotalUnsynthesised,SizeLE3,Size4to6,Size7to9,SizeGE10
+complex,Base Molecule Grammar,278,0.0,7.6,45.0,47.5
+complex,with BRICS Fragments,220,40.0,17.3,7.7,35.0
+mbs,Base Molecule Grammar,71,0.0,0.0,98.6,1.4
+mbs,with BRICS Fragments,104,74.0,2.9,23.1,0.0
+mnc,Base Molecule Grammar,46,0.0,84.8,0.0,15.2
+mnc,with BRICS Fragments,190,72.6,23.7,0.0,3.7
+mos,Base Molecule Grammar,416,0.0,3.8,34.1,62.0
+mos,with BRICS Fragments,402,59.2,3.2,0.5,37.1

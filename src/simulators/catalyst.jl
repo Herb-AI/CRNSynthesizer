@@ -35,7 +35,7 @@ function catalyst_simulation(
 
     # Convert ReactionSystem to ODESystem and then to ODEFunction
     # TODO: Investigate the Specialization of the ODEFunction
-    sys = convert(ODESystem, crn)
+    sys = ode_model(crn)
     sys = complete(sys)
     f = ODEFunction{true, SciMLBase.NoSpecialize}(sys)
 
@@ -48,7 +48,8 @@ function catalyst_simulation(
                 s -> string(s) == "var\"" * string(species_name) * "\"(t)", species(crn))
             for species_name in species_names]
 
-    oprob = ODEProblem{true, SciMLBase.NoSpecialize}(f, u0_dummy, (0.0, 10.0), ps_dummy)
+    tspan = (problem.time_data[1], problem.time_data[end])
+    oprob = ODEProblem{true, SciMLBase.NoSpecialize}(f, u0_dummy, tspan, ps_dummy)
     prob_generator(prob,
         p) = remake(
         prob; u0 = p[1:length(u0_dummy)], p = p[(length(u0_dummy) + 1):end]

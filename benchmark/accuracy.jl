@@ -1,6 +1,7 @@
 using CRNSynthesizer
 using Term.Progress
 using Term: with, update!
+using DataStructures
 
 include("data/estherification.jl")
 include("data/water.jl")
@@ -45,7 +46,7 @@ end
 
 max_time = 600
 
-PROBLEMS = [
+const PROBLEMS = [
     (
         name = "Water problem with O2 missing",
         problem = water_problem(;
@@ -53,8 +54,7 @@ PROBLEMS = [
         ),
         num_molecules = 5,
         num_reactions = 10,
-        num_networks = 1000,
-        network_goal = water_network()
+        num_networks = 1000
     ),
     (
         name = "Methane Combustion problem with O2 and CO2 missing",
@@ -63,8 +63,7 @@ PROBLEMS = [
         ),
         num_molecules = 10,
         num_reactions = 100,
-        num_networks = 1000,
-        network_goal = methane_network()
+        num_networks = 1000
     ),
     (
         name = "Ethylene problem with C₂H₄O missing",
@@ -73,8 +72,7 @@ PROBLEMS = [
         ),
         num_molecules = 300,
         num_reactions = 10000,
-        num_networks = 1000,
-        network_goal = ethylene_network()
+        num_networks = 1000
     ),
     (
         name = "Estherification problem with H2O, CH2O2 and CH4O missing",
@@ -83,16 +81,17 @@ PROBLEMS = [
         ),
         num_molecules = 70,
         num_reactions = 56000,
-        num_networks = 3000,
-        network_goal = estherification_network()
+        num_networks = 3000
     )
 ]
 
-# @profview for (name, problem, num_molecules, num_reactions, num_networks, network_goal) in PROBLEMS
-for (name, problem, num_molecules, num_reactions, num_networks, network_goal) in PROBLEMS
+# @profview for (name, problem, num_molecules, num_reactions, num_networks) in PROBLEMS
+for (name, problem, num_molecules, num_reactions, num_networks) in PROBLEMS
     println()
     println("-------------------------------------------------------")
     println("\033[1mBenchmarking problem: $name\033[0m")
+
+    network_goal = problem.goal_network
 
     # Setup
     pbar = ProgressBar()
@@ -102,6 +101,23 @@ for (name, problem, num_molecules, num_reactions, num_networks, network_goal) in
         max_time = max_time, max_programs = num_networks, max_depth = 10
     )
 
+    fragment_rules = OrderedDict{Int, Vector{Expr}}()
+    starting_fragments = Expr[]
+    for m in problem.known_molecules
+        e, s = parse_molecule_to_fragment_rules(m.canonical_smiles)
+        for (k, v) in e
+            if haskey(fragment_rules, k)
+                append!(fragment_rules[k], v)
+                unique!(fragment_rules[k])
+            else
+                fragment_rules[k] = v
+            end
+        end
+        append!(starting_fragments, s)
+    end
+    starting_fragments = unique(starting_fragments)
+
+    #= DNF for every problem Pipelines without molecule step are not feasible based on Wijers conclusions
     # Pipeline: Problem -> Networks
     elapsed_time = @elapsed networks = synthesize_networks(problem, network_settings)
     println(
@@ -111,12 +127,15 @@ for (name, problem, num_molecules, num_reactions, num_networks, network_goal) in
         elapsed_time,
         " seconds."
     )
-    rank_networks(pbar, networks, problem, network_goal)
+    rank_networks(pbar, networks, problem, network_goal) =#
 
     # Pipeline: Problem -> Molecules -> Networks
     elapsed_time = @elapsed (networks,
         molecules) = synthesize_networks(
-        problem, molecule_settings, network_settings, initial_molecules_count = num_molecules
+        problem, molecule_settings, network_settings;
+        initial_molecules_count = num_molecules,
+        fragment_rules = fragment_rules,
+        starting_fragments = starting_fragments
     )
     println(
         "[Problem → Molecules → Networks] Found ",
@@ -127,10 +146,10 @@ for (name, problem, num_molecules, num_reactions, num_networks, network_goal) in
     )
     rank_networks(pbar, networks, problem, network_goal)
 
-    # Pipeline: Problem -> Reactions -> Networks
+    #= Pipeline: Problem -> Reactions -> Networks
     elapsed_time = @elapsed (networks,
         reactions) = synthesize_networks_2(
-        problem, reaction_settings, network_settings, initial_reactions_count = num_reactions
+        problem, reaction_settings, network_settings; initial_reactions_count = num_reactions
     )
     println(
         "[Problem → Reactions → Networks] Found ",
@@ -139,7 +158,7 @@ for (name, problem, num_molecules, num_reactions, num_networks, network_goal) in
         elapsed_time,
         " seconds."
     )
-    rank_networks(pbar, networks, problem, network_goal)
+    rank_networks(pbar, networks, problem, network_goal) =#
 
     # Pipeline: Problem -> Molecules -> Reactions -> Networks
     elapsed_time = @elapsed (networks,
@@ -148,9 +167,11 @@ for (name, problem, num_molecules, num_reactions, num_networks, network_goal) in
         problem,
         molecule_settings,
         reaction_settings,
-        network_settings,
+        network_settings;
         initial_molecules_count = num_molecules,
-        initial_reactions_count = num_reactions
+        initial_reactions_count = num_reactions,
+        fragment_rules = fragment_rules,
+        starting_fragments = starting_fragments
     )
     println(
         "[Problem → Molecules → Reactions → Networks] Found ",

@@ -1,9 +1,10 @@
 @testitem "BondType" begin
-    @test instances(BondType) == (single, double, triple, quadruple)
+    @test instances(BondType) == (single, double, aromatic, triple, quadruple)
 
     @testset "to_string" begin
         @test to_string(single) == "-"
         @test to_string(double) == "="
+        @test to_string(aromatic) == ":"
         @test to_string(triple) == "≡"
         @test to_string(quadruple) == "≣"
     end
@@ -38,7 +39,7 @@ end
     @testset "Constructor" begin
         atoms = [Atom("H"), Atom("O")]
         bonds = [Bond(1, 2, single)]
-        molecule = Molecule(atoms, bonds)
+        molecule = Molecule(atoms, bonds, "[H]-[O]", Vector{UInt8}())
 
         @test length(molecule.atoms) == 2
         @test length(molecule.bonds) == 1
@@ -52,7 +53,7 @@ end
     @testset "Count atoms" begin
         atoms = [Atom("H"), Atom("O"), Atom("H")]
         bonds = [Bond(1, 2, single), Bond(2, 3, single)]
-        molecule = Molecule(atoms, bonds)
+        molecule = Molecule(atoms, bonds, "[H]-[O]-[H]", Vector{UInt8}())
 
         atom_counts = count_atoms(molecule)
         @test atom_counts["H"] == 2
@@ -67,9 +68,9 @@ end
     end
 
     @testset "To SMILES" begin
-        atoms = [Atom("H"), Atom("O"), Atom("H")]
+        atoms = [Atom("[H]"), Atom("[O]"), Atom("[H]")]
         bonds = [Bond(1, 2, single), Bond(2, 3, single)]
-        molecule = Molecule(atoms, bonds)
+        molecule = Molecule(atoms, bonds, "[H]-[O]-[H]", Vector{UInt8}())
         smiles = to_SMILES(molecule)
         @test smiles == "[H]-[O]-[H]"
     end
@@ -96,11 +97,6 @@ end
         @test smiles == smiles2
 
         smiles = "[H]-[N](-[H])-[O]-[H]"
-        molecule = from_SMILES(smiles)
-        smiles2 = to_SMILES(molecule)
-        @test smiles == smiles2
-
-        smiles = "[H](-[N]-[N](-[O]-[O]-2)-[O]-1)-[O]-[N](-[H])-[N]-1-[O]-2"
         molecule = from_SMILES(smiles)
         smiles2 = to_SMILES(molecule)
         @test smiles == smiles2

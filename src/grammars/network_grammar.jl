@@ -20,13 +20,13 @@ function network_grammar(; settings::SynthesizerSettings = SynthesizerSettings()
 end
 
 function network_grammar(
-        atoms::Vector{Atom};
-        problem::ProblemDefinition = ProblemDefinition(),
+        atom_valences::OrderedDict{String, Int},
+        problem::ProblemDefinition;
         settings::SynthesizerSettings = SynthesizerSettings()
 )
     grammar = network_grammar()
     merge_grammars!(grammar, reaction_grammar(; settings = settings))
-    merge_grammars!(grammar, SMILES_grammar(atoms))
+    merge_grammars!(grammar, SMILES_grammar(atom_valences))
 
     # required = problem.required_molecules
     # required_rules = Vector{Tuple{Int, ReactionPosition}}()
@@ -46,9 +46,9 @@ function network_grammar(
 end
 
 function network_grammar(
-        molecules::Vector{Molecule};
-        problem::ProblemDefinition = ProblemDefinition(),
-        required_molecules::Vector{Molecule} = Vector{Molecule}(),
+        molecules::Vector{Molecule},
+        problem::ProblemDefinition,
+        required_molecules::Vector{Molecule} = Vector{Molecule}();
         settings::SynthesizerSettings = SynthesizerSettings(),
         check_required::Bool = true
 )
@@ -63,17 +63,20 @@ function network_grammar(
 
     required = problem.required_molecules
     required_rules = Vector{Tuple{Int, ReactionPosition}}()
+    req_molecules = Vector{Tuple{Molecule, ReactionPosition}}()
     for (i, required_molecule) in enumerate(required)
         molecule = required_molecule.molecule
         add_rule!(grammar, :(required_molecule = $molecule))
         rule = findfirst(==(:($molecule)), grammar.rules)
         push!(required_rules, (rule, required_molecule.position))
+        push!(req_molecules, (required_molecule.molecule, required_molecule.position))
     end
 
     for molecule in required_molecules
         add_rule!(grammar, :(required_molecule = $molecule))
         rule = findfirst(==(:($molecule)), grammar.rules)
         push!(required_rules, (rule, UNKNOWN))
+        push!(req_molecules, (molecule, UNKNOWN))
     end
 
     if length(required) == 0 && length(required_molecules) == 0 && check_required
@@ -82,15 +85,15 @@ function network_grammar(
         haskey(settings.options, :disable_contains_molecules) &&
         settings.options[:disable_contains_molecules]
     )
-        addconstraint!(grammar, ContainsMolecules(required_rules))
+        addconstraint!(grammar, ContainsMolecules(req_molecules, required_rules))
     end
 
     return grammar
 end
 
 function network_grammar(
-        reactions::Vector{Reaction};
-        problem::ProblemDefinition = ProblemDefinition(),
+        reactions::Vector{Reaction},
+        problem::ProblemDefinition;
         settings::SynthesizerSettings = SynthesizerSettings()
 )
     grammar = network_grammar(; settings = settings)
@@ -106,8 +109,8 @@ function network_grammar(
         reaction_to_rule[rule] = i
     end
 
-    required_molecules::Dict{
-        RequiredMolecule, Vector{Int}} = Dict{
+    required_molecules::OrderedDict{
+        RequiredMolecule, Vector{Int}} = OrderedDict{
         RequiredMolecule, Vector{Int}
     }()
     for required_molecule in problem.required_molecules
@@ -153,5 +156,5 @@ end
 function network_grammar(
         problem::ProblemDefinition; settings::SynthesizerSettings = SynthesizerSettings()
 )
-    return network_grammar(get_atoms(problem); problem = problem, settings = settings)
+    return network_grammar(problem.atom_valences, problem; settings = settings)
 end

@@ -10,30 +10,38 @@ struct RequiredMolecule
 end
 
 struct ProblemDefinition
-    # TODO: add the known atoms
+    atom_valences::OrderedDict{String, Int}
     known_molecules::Vector{Molecule}
-    known_reactions::Vector{Reaction}
+    goal_molecules::Vector{Molecule}
+    goal_network::ReactionNetwork
     expected_profiles::Dict{Molecule, Vector{Float64}}
     time_data::Vector{Float64}
     required_molecules::Vector{RequiredMolecule}
+    partial_reaction::Union{Nothing, Reaction}
 
-    function ProblemDefinition(;
-            known_molecules::Vector{Molecule} = Molecule[],
-            known_reactions::Vector{Reaction} = Reaction[],
+    function ProblemDefinition(
+            atom_valences::OrderedDict{String, Int},
+            known_molecules::Vector{Molecule},
+            goal_molecules::Vector{Molecule},
+            goal_network::ReactionNetwork;
             expected_profiles::Dict{Molecule, Vector{Float64}} = Dict{
                 Molecule, Vector{Float64}}(),
             time_data::Vector{Float64} = Float64[],
-            required_molecules::Vector{RequiredMolecule} = RequiredMolecule[]
+            required_molecules::Vector{RequiredMolecule} = RequiredMolecule[],
+            partial_reaction::Union{Nothing, Reaction} = nothing
     )
         if isempty(required_molecules)
             required_molecules = preprocess_problem(known_molecules, expected_profiles)
         end
         new(
+            atom_valences,
             known_molecules,
-            known_reactions,
+            goal_molecules,
+            goal_network,
             expected_profiles,
             time_data,
-            required_molecules
+            required_molecules,
+            partial_reaction
         )
     end
 end
@@ -82,30 +90,30 @@ function preprocess_problem(
     return required_molecules
 end
 
-function get_atoms(problem::ProblemDefinition)
-    atoms = Set{Atom}()
+#=function get_atoms(problem::ProblemDefinition)::Vector{String}
+    atoms = Set{String}()
     for molecule in problem.known_molecules
         for atom in molecule.atoms
-            push!(atoms, atom)
+            push!(atoms, atom.name)
         end
     end
     for reaction in problem.known_reactions
         for input in reaction.inputs
             for atom in input[2].atoms
-                push!(atoms, atom)
+                push!(atoms, atom.name)
             end
         end
         for output in reaction.outputs
             for atom in output[2].atoms
-                push!(atoms, atom)
+                push!(atoms, atom.name)
             end
         end
     end
 
     return collect(atoms)
-end
+end=#
 
-function get_molecules(problem::ProblemDefinition)
+#=function get_molecules(problem::ProblemDefinition)
     molecules = Set{Molecule}()
     for molecule in problem.known_molecules
         push!(molecules, molecule)
@@ -120,7 +128,7 @@ function get_molecules(problem::ProblemDefinition)
     end
 
     return collect(molecules)
-end
+end=#
 
 # function herb_cost_function(problem::ProblemDefinition)
 #     sol -> begin

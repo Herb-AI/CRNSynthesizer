@@ -36,6 +36,22 @@ function methane_problem(; selected_known_indices = 1:4, selected_expected_indic
 
     # Define the known molecules based on selected indices
     known_molecules = all_molecules[selected_known_indices]
+    goal_molecules = Vector{Molecule}()
+    for i in eachindex(all_molecules)
+        if !(i in selected_known_indices)
+            push!(goal_molecules, all_molecules[i])
+        end
+    end
+
+    atom_valences = get_valences_from_molecules(all_molecules)
+
+    reaction = CRNSynthesizer.Reaction(
+        nothing,
+        [(1, all_molecules[1]), (2, all_molecules[2])],
+        [(1, all_molecules[3]), (2, all_molecules[4])]
+    )
+
+    goal_network = CRNSynthesizer.ReactionNetwork([reaction])
 
     # Build expected profiles dictionary
     expected_profiles = Dict{Molecule, Vector{Float64}}()
@@ -47,30 +63,14 @@ function methane_problem(; selected_known_indices = 1:4, selected_expected_indic
     end
 
     # Define the problem
-    problem = ProblemDefinition(;
-        known_molecules = known_molecules,
+    problem = ProblemDefinition(
+        atom_valences,
+        known_molecules,
+        goal_molecules,
+        goal_network;
         expected_profiles = expected_profiles,
         time_data = time_data
     )
 
     return problem
-end
-
-function methane_network()
-    # Define molecules using SMILES
-    all_molecules = [
-        from_SMILES("[H]-[C](-[H])(-[H])-[H]"),               # CH₄
-        from_SMILES("[O]=[O]"),                               # O₂
-        from_SMILES("[O]=[C]=[O]"),                           # CO₂
-        from_SMILES("[H]-[O]-[H]")                            # H₂O
-    ]
-
-    # Define the reaction: CH₄ + 2O₂ --> CO₂ + 2H₂O
-    reaction = CRNSynthesizer.Reaction(
-        nothing,
-        [(1, all_molecules[1]), (2, all_molecules[2])],
-        [(1, all_molecules[3]), (2, all_molecules[4])]
-    )
-
-    return CRNSynthesizer.ReactionNetwork([reaction])
 end

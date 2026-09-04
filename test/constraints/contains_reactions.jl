@@ -1,5 +1,6 @@
 @testitem "ContainsReactions" begin
     using HerbGrammar
+    using DataStructures
 
     # Create some reactions
     m1 = from_SMILES("[H]-[H]")
@@ -13,14 +14,25 @@
 
     # Settings for the synthesizer without the ContainsReactions constraint
     settings = SynthesizerSettings(
-        max_depth = 7, options = Dict{Symbol, Any}(:disable_contains_reactions => true)
+        max_depth = 7, options = Dict{Symbol, Any}(
+            :disable_contains_reactions => true, :disable_contains_molecules => true)
+    )
+
+    # Define a problem to pass required molecules and atom valences
+    atom_valences = OrderedDict("[H]" => 1, "[O]" => 2)
+    problem = ProblemDefinition(
+        atom_valences,
+        Molecule[],
+        Molecule[],
+        ReactionNetwork(Reaction[]);
+        required_molecules = [RequiredMolecule(m1, INPUT), RequiredMolecule(m2, OUTPUT)]
     )
 
     # Create a network grammar without the ContainsReactions constraint
-    without_constraint_grammar = network_grammar([r1, r2, r3], settings = settings)
+    without_constraint_grammar = network_grammar([r1, r2, r3], problem; settings = settings)
 
     # Create a network grammar with the ContainsReactions constraint
-    with_constraint_grammar = network_grammar([r1, r2, r3], settings = settings)
+    with_constraint_grammar = network_grammar([r1, r2, r3], problem; settings = settings)
     constraint = ContainsReactions(
         with_constraint_grammar,
         [RequiredMolecule(m1, INPUT), RequiredMolecule(m2, OUTPUT)],

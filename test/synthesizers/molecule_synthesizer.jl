@@ -1,14 +1,92 @@
 @testitem "Molecule Synthesizer" begin
+    using DataStructures
+    # Create some atom valences
+    atom_valences = OrderedDict("[H]" => 1, "[O]" => 2, "[C]" => 4, "[N]" => 3)
 
-    # Create some atoms
-    a1 = Atom("H")
-    a2 = Atom("O")
-    a3 = Atom("C")
+    settings = SynthesizerSettings(
+        max_depth = 4, options = Dict{Symbol, Any}(:unique_candidates => true))
+    unique_molecules = synthesize_molecules(atom_valences; settings = settings)
+    @test length(unique_molecules) > 0
+    #println("Number of unique molecules synthesized (RDKit canonicalization): ",
+    # length(unique_molecules))
 
-    # Synthesize options
-    settings = SynthesizerSettings(max_depth = 8)
-    molecules = synthesize_molecules([a1, a2, a3], settings)
-    @test length(molecules) > 0
+    target_molecule = "CC(C)(C)OC(=O)CONC(=O)NCc1cccc2ccccc12"
+    # println("Target molecule: ", target_molecule)
+    entry_fragments, starting_fragments = parse_molecule_to_fragment_rules(target_molecule)
+    #println("Fragment rules: ", entry_fragments)
+    #println("Starting fragments: ", starting_fragments)
 
-    # TODO: Add more specific tests for the synthesized molecules
+    settings = SynthesizerSettings(
+        max_depth = 6, options = Dict{Symbol, Any}(:unique_candidates => true))
+    fragment_molecules = synthesize_molecules(
+        atom_valences; settings = settings, fragment_rules = entry_fragments,
+        starting_fragments = starting_fragments)
+    @test length(fragment_molecules) > 0
+    @test length(fragment_molecules) > length(unique_molecules)
+    #println(fragment_molecules)
+    #println("Number of unique fragment-based molecules synthesized: ",
+    #length(fragment_molecules))
+
+
+    target_molecule = "C=CC(c1ccccc1)C(C(=O)c1ccc([N+](=O)[O-])cc1)N(C)C"
+    # println("Target molecule: ", target_molecule)
+    entry_fragments, starting_fragments = parse_molecule_to_fragment_rules(target_molecule)
+    #println("Fragment rules: ", entry_fragments)
+    #println("Starting fragments: ", starting_fragments)
+
+    settings = SynthesizerSettings(
+        max_depth = 6, options = Dict{Symbol, Any}(:unique_candidates => true))
+    fragment_molecules = synthesize_molecules(
+        atom_valences; settings = settings, fragment_rules = entry_fragments,
+        starting_fragments = starting_fragments)
+    @test length(fragment_molecules) > 0
+    @test length(fragment_molecules) > length(unique_molecules)
+    #println(fragment_molecules)
+    #println("Number of unique fragment-based molecules synthesized: ",
+    #length(fragment_molecules))
+end
+
+@testitem "SMILES Unique Digit Remapping" begin
+    # Test a more complex overlapping ring system to make sure they remain correct
+    input_smiles2 = "C1CC2CC1CC2"
+    explicit_smiles2 = CRNSynthesizer.make_smiles_custom_explicit(input_smiles2)
+    @test occursin("1", explicit_smiles2)
+    @test occursin("2", explicit_smiles2)
+end
+
+@testitem "Ions Synthesis" begin
+    using DataStructures
+
+    ion_smiles = [
+        "[Cl-]",
+        "[Br-]",
+        "[I-]",
+        "[F-]",
+        "[K+]",
+        "[Na+]",
+        "[Cu+]",
+        "[Li+]",
+        "[Mg+2]",
+        "[S-2]"
+    ]
+
+    molecules = [from_SMILES(s) for s in ion_smiles]
+    atom_valences = get_valences_from_molecules(molecules)
+
+    # Verify that valences are extracted properly (each ion has 0 valence)
+    for s in keys(atom_valences)
+        @test atom_valences[s] == 0
+    end
+
+    settings = SynthesizerSettings(
+        max_depth = 4,
+        options = Dict{Symbol, Any}(:unique_candidates => true)
+    )
+    synthesized = synthesize_molecules(atom_valences; settings = settings)
+
+    # Verify that all introduced ions are present in the output of the synthesizer
+    for mol in molecules
+        target = to_SMILES(mol)
+        @test any(to_SMILES(m) == target for m in synthesized)
+    end
 end
